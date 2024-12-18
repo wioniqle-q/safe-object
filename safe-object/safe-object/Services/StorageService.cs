@@ -157,19 +157,32 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
         var plaintext = ArrayPool<byte>.Shared.Rent(Constants.StorageConstants.BufferSize);
         var chunkNonce = ArrayPool<byte>.Shared.Rent(Constants.KeyVaultConstants.NonceSize);
 
-        var position = 0L;
-
         try
         {
-            while (true)
-            {
-                var tagRead = await sourceStream.ReadAsync(tag.AsMemory(0, Constants.KeyVaultConstants.TagSize),
-                    cancellationToken);
-                if (tagRead is 0) break;
+            var totalLength = sourceStream.Length;
+            
+            var totalBlocks =
+                (long)Math.Ceiling((double)(totalLength - Constants.KeyVaultConstants.NonceSize) / 
+                    Constants.KeyVaultConstants.TagSize + Constants.StorageConstants.BufferSize);
+            
+            var currentPrimeIndex = 0;
 
-                var bytesRead = await sourceStream.ReadAsync(buffer.AsMemory(0, Constants.StorageConstants.BufferSize),
+            for (var blockIndex = 0L; blockIndex < totalBlocks; blockIndex++)
+            {
+                var tagRead = await sourceStream.ReadAsync(
+                    tag.AsMemory(0, Constants.KeyVaultConstants.TagSize),
                     cancellationToken);
+
+                if (tagRead is 0) break;
+                
+                var bytesRead = await sourceStream.ReadAsync(
+                    buffer.AsMemory(0, Constants.StorageConstants.BufferSize),
+                    cancellationToken);
+
                 if (bytesRead is 0) break;
+                
+                var entropyMix = (long)(blockIndex * Constants.StorageConstants.Ratio * Constants.StorageConstants.PrimeNumbers[currentPrimeIndex]);
+                currentPrimeIndex = (currentPrimeIndex + 1) % Constants.StorageConstants.PrimeNumbers.Length;
 
                 MemoryMarshal.Write(chunkNonce.AsSpan(), in MemoryMarshal.GetReference(nonce.AsSpan()));
 
@@ -180,19 +193,26 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
 
                     if (nonceSpan.Length >= sizeof(long))
                     {
-                        var positionSpan = MemoryMarshal.Cast<long, byte>(MemoryMarshal.CreateSpan(ref position, 1));
+                        var entropySpan = MemoryMarshal.Cast<long, byte>(MemoryMarshal.CreateSpan(ref entropyMix, 1));
                         var vectorNonce = MemoryMarshal.Cast<byte, Vector<byte>>(nonceSpan);
-                        var vectorPosition = MemoryMarshal.Cast<byte, Vector<byte>>(positionSpan);
+                        var vectorEntropy = MemoryMarshal.Cast<byte, Vector<byte>>(entropySpan);
 
-                        if (vectorNonce.Length > 0 && vectorPosition.Length > 0)
-                            vectorNonce[0] = Vector.Xor(vectorNonce[0], vectorPosition[0]);
+                        if (vectorNonce.Length > 0 && vectorEntropy.Length > 0)
+                        {
+                            vectorNonce[0] = Vector.Xor(vectorNonce[0], vectorEntropy[0]);
+                        }
                     }
                 }
                 else
                 {
                     Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.KeyVaultConstants.NonceSize);
-                    var positionBytes = BitConverter.GetBytes(position);
-                    for (var i = 0; i < sizeof(long); i++) chunkNonce[i] ^= positionBytes[i];
+                    var entropyBytes = BitConverter.GetBytes(entropyMix);
+                    
+                    for (var i = 0; i < sizeof(long); i++)
+                    {
+                        chunkNonce[i] ^= entropyBytes[i];
+                        chunkNonce[i] = (byte)((chunkNonce[i] << 1) ^ ((chunkNonce[i] & 0x80) == 0x80 ? 0x1B : 0x00));
+                    }
                 }
 
                 aesGcm.Decrypt(
@@ -202,8 +222,7 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
                     plaintext.AsSpan(0, bytesRead));
 
                 await destinationStream.WriteAsync(plaintext.AsMemory(0, bytesRead), cancellationToken);
-
-                position++;
+                await destinationStream.FlushAsync(cancellationToken);
             }
         }
         finally
@@ -214,6 +233,7 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
             ArrayPool<byte>.Shared.Return(chunkNonce, true);
         }
     }
+    
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private async ValueTask ProcessEncryptedFileAsync(FileProcessingRequest request, byte[] key, byte[] nonce,
@@ -242,6 +262,9 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
         await destinationStream.WriteAsync(nonce.AsMemory(), cancellationToken);
 
         using var aesGcm = new AesGcm(key, Constants.KeyVaultConstants.TagSize);
+        
+        var fileLength = sourceStream.Length;
+        var totalBlocks = (long)Math.Ceiling((double)fileLength / Constants.StorageConstants.BufferSize);
 
         var buffer = ArrayPool<byte>.Shared.Rent(Constants.StorageConstants.BufferSize);
         var ciphertext = ArrayPool<byte>.Shared.Rent(Constants.StorageConstants.BufferSize);
@@ -250,17 +273,20 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
         var combinedBuffer =
             ArrayPool<byte>.Shared.Rent(Constants.KeyVaultConstants.TagSize + Constants.StorageConstants.BufferSize);
 
-        var position = 0L;
-
         try
         {
-            while (true)
+            long previousBlock = 0;
+            long currentBlock = 1;
+
+            for (var position = 0L; position < totalBlocks; position++)
             {
                 var bytesRead = await sourceStream.ReadAsync(
                     buffer.AsMemory(0, Constants.StorageConstants.BufferSize),
                     cancellationToken);
-                if (bytesRead is 0) break;
 
+                if (bytesRead is 0) break;
+                
+                var fibonacciMix = (previousBlock + currentBlock) % long.MaxValue;
                 MemoryMarshal.Write(chunkNonce.AsSpan(), in MemoryMarshal.GetReference(nonce.AsSpan()));
 
                 if (Vector.IsHardwareAccelerated)
@@ -270,7 +296,8 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
 
                     if (nonceSpan.Length >= sizeof(long))
                     {
-                        var positionSpan = MemoryMarshal.Cast<long, byte>(MemoryMarshal.CreateSpan(ref position, 1));
+                        var positionSpan =
+                            MemoryMarshal.Cast<long, byte>(MemoryMarshal.CreateSpan(ref fibonacciMix, 1));
                         var vectorNonce = MemoryMarshal.Cast<byte, Vector<byte>>(nonceSpan);
                         var vectorPosition = MemoryMarshal.Cast<byte, Vector<byte>>(positionSpan);
 
@@ -281,8 +308,9 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
                 else
                 {
                     Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.KeyVaultConstants.NonceSize);
-                    var positionBytes = BitConverter.GetBytes(position);
-                    for (var i = 0; i < sizeof(long); i++) chunkNonce[i] ^= positionBytes[i];
+                    var mixBytes = BitConverter.GetBytes(fibonacciMix);
+                    for (var i = 0; i < sizeof(long); i++)
+                        chunkNonce[i] ^= mixBytes[i];
                 }
 
                 aesGcm.Encrypt(
@@ -298,8 +326,11 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
                 await destinationStream.WriteAsync(
                     combinedBuffer.AsMemory(0, Constants.KeyVaultConstants.TagSize + bytesRead),
                     cancellationToken);
-
-                position++;
+                await destinationStream.FlushAsync(cancellationToken);
+                
+                var nextBlock = (currentBlock + previousBlock) % long.MaxValue;
+                previousBlock = currentBlock;
+                currentBlock = nextBlock;
             }
         }
         finally
