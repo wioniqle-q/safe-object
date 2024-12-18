@@ -19,7 +19,7 @@ public static partial class LinuxKernel
     [LibraryImport(LibcLibraryName, SetLastError = true)]
     public static partial int close(int fd);
 
-    [DllImport(LibcLibraryName, SetLastError = true, EntryPoint = "syscall")]
+    [LibraryImport(LibcLibraryName, SetLastError = true, EntryPoint = "syscall")]
     private static extern int ioprio_set(long syscallNumber, int which, int who, int ioprio);
 
     public static int SetIoPriority(int which, int who, int ioClass, int priority)
