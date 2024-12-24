@@ -9,15 +9,14 @@ namespace safe_object.Services;
 
 public sealed class DirectStream : FileStream
 {
-    private const FileOptions DefaultFileOptions = FileOptions.WriteThrough;
+    private const FileOptions DefaultOptions = FileOptions.WriteThrough;
 
-    private readonly int _fileDescriptor;
-    private readonly IntPtr _windowsHandle;
-    private readonly ILogger<StorageService>? _logger;
+    private readonly NativeHandles _handles;
     private readonly bool _isWindows;
+    private readonly ILogger<StorageService>? _logger;
+    private bool _disposed;
 
-    private volatile bool _disposed;
-    private volatile int _isFlushInProgress;
+    private int _flushState;
 
     public DirectStream(
         string path,
@@ -27,126 +26,195 @@ public sealed class DirectStream : FileStream
         int bufferSize,
         FileOptions options,
         ILogger<StorageService>? logger)
-        : base(path, mode, access, share, bufferSize, options | DefaultFileOptions)
+        : base(path ?? throw new ArgumentNullException(nameof(path)),
+            mode,
+            access,
+            share,
+            bufferSize,
+            options | DefaultOptions)
     {
-        ArgumentNullException.ThrowIfNull(path);
-
         _logger = logger;
         _isWindows = OperatingSystem.IsWindows();
+        _handles = InitializeNativeHandles();
 
-        if (_isWindows)
-            _windowsHandle = SafeFileHandle.DangerousGetHandle();
-        else
-        {
-            _fileDescriptor = SafeFileHandle.DangerousGetHandle().ToInt32();
-            SetPriority();
-            ApplyFadvise();
-        }
+        ConfigureStreamProperties();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void SetPriority()
+    private NativeHandles InitializeNativeHandles()
     {
-        if (_isWindows)
-            return;
+        return _isWindows
+            ? new NativeHandles(0, SafeFileHandle.DangerousGetHandle())
+            : new NativeHandles(SafeFileHandle.DangerousGetHandle().ToInt32(), IntPtr.Zero);
+    }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ConfigureStreamProperties()
+    {
+        if (_isWindows is not true) ConfigureUnixStreamProperties();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ConfigureUnixStreamProperties()
+    {
+        SetUnixPriority();
+        ConfigureUnixAdvice();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void SetUnixPriority()
+    {
         Thread.MemoryBarrier();
 
-        var result = SetIoPriority(
-            Constants.LinuxNativeConstants.IoprioWhoProcess,
-            0,
-            Constants.LinuxNativeConstants.IoprioClassRt,
-            0
-        );
+        if (TrySetIoPriority(Constants.Linux.IoPriority.ClassRealTime) ||
+            TrySetIoPriority(Constants.Linux.IoPriority.ClassBestEffort))
+            return;
 
-        if (result is 0) return;
-
-        result = SetIoPriority(
-            Constants.LinuxNativeConstants.IoprioWhoProcess,
-            0,
-            Constants.LinuxNativeConstants.IoprioClassBe,
-            0
-        );
-
-        if (result is not 0)
-            _logger?.LogWarning("Failed to set I/O priority. Error: {errno}", Marshal.GetLastWin32Error());
+        _logger?.LogWarning("Failed to set I/O priority. Error: {errno}", Marshal.GetLastWin32Error());
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ApplyFadvise()
+    private static bool TrySetIoPriority(int priorityClass)
     {
-        if (_isWindows)
-            return;
-
+        return SetIoPriority(
+            Constants.Linux.IoPriority.WhoProcess,
+            0,
+            priorityClass,
+            0) is 0;
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ConfigureUnixAdvice()
+    {
         SecurityService.ProcessPaddingBuffer();
 
-        var result = posix_fadvise(_fileDescriptor, 0, Length, Constants.LinuxNativeConstants.PosixFadvSequential);
+        var result = posix_fadvise(
+            _handles.FileDescriptor,
+            0,
+            Length,
+            Constants.Linux.FileAdvice.Sequential);
+
         if (result is not 0)
             _logger?.LogWarning(
-                $"posix_fadvise failed with result: {result}. File descriptor: {_fileDescriptor}, Length: {Length}.");
+                "posix_fadvise failed with result: {Result}. File descriptor: {FileDescriptor}, Length: {Length}",
+                result,
+                _handles.FileDescriptor,
+                Length);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override async Task FlushAsync(CancellationToken cancellationToken)
     {
-        if (Interlocked.Exchange(ref _isFlushInProgress, 1) is 1)
-            return;
+        if (TryEnterFlushOperation() is not true) return;
 
         try
         {
-            if (SecurityService.ValidateOperation() is not true)
-            {
-                SecurityService.ProcessPaddingBuffer();
-                throw new SecurityException("Security validation failed");
-            }
-
-            ObjectDisposedException.ThrowIf(_disposed, nameof(DirectStream));
-
-            Thread.SpinWait(Random.Shared.Next(10, 50));
-            Thread.MemoryBarrier();
-
-            await base.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-            if (_isWindows && FlushFileBuffers(SafeFileHandle) is not true)
-            {
-                throw new IOException("FlushFileBuffers failed");
-            }
-            else
-            {
-                if (fsync(_fileDescriptor) is not 0)
-                    throw new IOException($"fsync failed for file descriptor: {_fileDescriptor}.");
-
-                SecurityService.ProcessPaddingBuffer();
-                Thread.MemoryBarrier();
-
-                var result = posix_fadvise(_fileDescriptor, 0, Length, Constants.LinuxNativeConstants.PosixFadvDontneed);
-                if (result is not 0)
-                    _logger?.LogWarning(
-                        "posix_fadvise failed with result: {result}. File descriptor: {_fd}, Length: {Length}.",
-                        result, _fileDescriptor, Length);
-            }
+            await ExecuteFlushOperationAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            SecurityService.ProcessPaddingBuffer();
-            Interlocked.Exchange(ref _isFlushInProgress, 0);
+            CompleteFlushOperation();
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool TryEnterFlushOperation()
+    {
+        return Interlocked.Exchange(ref _flushState, 1) is not 1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private async Task ExecuteFlushOperationAsync(CancellationToken cancellationToken)
+    {
+        ValidateFlushOperation();
+
+        await ExecutePlatformSpecificFlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ValidateFlushOperation()
+    {
+        if (SecurityService.ValidateOperation() is not true)
+        {
+            SecurityService.ProcessPaddingBuffer();
+            throw new SecurityException("Security validation failed");
+        }
+
+        ObjectDisposedException.ThrowIf(_disposed, nameof(DirectStream));
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private async Task ExecutePlatformSpecificFlushAsync(CancellationToken cancellationToken)
+    {
+        Thread.SpinWait(Random.Shared.Next(Constants.DirectStream.SpinWait.MinDuration,
+            Constants.DirectStream.SpinWait.MaxDuration));
+        Thread.MemoryBarrier();
+
+        await base.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+        if (_isWindows)
+            ExecuteWindowsFlush();
+        else
+            await ExecuteUnixFlushAsync();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteWindowsFlush()
+    {
+        if (FlushFileBuffers(SafeFileHandle) is not true)
+            throw new IOException("FlushFileBuffers failed" + $" for handle: {SafeFileHandle.DangerousGetHandle()}" +
+                                  $" with error: {Marshal.GetLastWin32Error()}");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private async Task ExecuteUnixFlushAsync()
+    {
+        if (fsync(_handles.FileDescriptor) is not 0)
+            throw new IOException($"fsync failed for file descriptor: {_handles.FileDescriptor} " +
+                                  $"with error: {Marshal.GetLastWin32Error()}");
+
+        await FinalizeUnixFlushAsync();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Task FinalizeUnixFlushAsync()
+    {
+        SecurityService.ProcessPaddingBuffer();
+        Thread.MemoryBarrier();
+
+        var result = posix_fadvise(
+            _handles.FileDescriptor,
+            0,
+            Length,
+            Constants.Linux.FileAdvice.DontNeed);
+
+        if (result is not 0)
+            _logger?.LogWarning(
+                "posix_fadvise failed with result: {Result}. File descriptor: {FileDescriptor}, Length: {Length}",
+                result,
+                _handles.FileDescriptor,
+                Length);
+
+        return Task.CompletedTask;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void CompleteFlushOperation()
+    {
+        SecurityService.ProcessPaddingBuffer();
+        Interlocked.Exchange(ref _flushState, 0);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     protected override void Dispose(bool disposing)
     {
-        if (_disposed)
-            return;
+        if (_disposed) return;
 
         try
         {
             if (disposing) base.Dispose(disposing);
 
-            if (_isWindows)
-                CloseHandle(_windowsHandle);
-            else
-                close(_fileDescriptor);
+            CloseNativeHandles();
         }
         finally
         {
@@ -157,26 +225,33 @@ public sealed class DirectStream : FileStream
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override async ValueTask DisposeAsync()
     {
-        if (_disposed)
-            return;
+        if (_disposed) return;
 
         try
         {
             await base.DisposeAsync().ConfigureAwait(false);
-            
-            if (_isWindows)
-                CloseHandle(_windowsHandle);
-            else
-                close(_fileDescriptor);
+            CloseNativeHandles();
         }
         finally
         {
             _disposed = true;
+            GC.SuppressFinalize(this);
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void CloseNativeHandles()
+    {
+        if (_isWindows)
+            CloseHandle(_handles.WindowsHandle);
+        else
+            close(_handles.FileDescriptor);
     }
 
     ~DirectStream()
     {
         Dispose(true);
     }
+
+    private readonly record struct NativeHandles(int FileDescriptor, IntPtr WindowsHandle);
 }

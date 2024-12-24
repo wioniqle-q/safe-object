@@ -20,6 +20,7 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
 
     private bool _disposed;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
         Dispose(true);
@@ -36,7 +37,7 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
 
         var filePrivateKey = Convert.ToBase64String(GenerateRandomKey());
         var key = Convert.FromBase64String(filePrivateKey);
-        var nonce = new byte[Constants.KeyVaultConstants.NonceSize];
+        var nonce = new byte[Constants.Security.KeyVault.NonceSize];
         RandomNumberGenerator.Fill(nonce);
 
         try
@@ -75,6 +76,7 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Dispose(bool disposing)
     {
         if (_disposed) return;
@@ -117,7 +119,7 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
     {
         ValidateSecurityOperation();
 
-        return new DirectStream(path, mode, access, FileShare.None, Constants.StorageConstants.BufferSize,
+        return new DirectStream(path, mode, access, FileShare.None, Constants.Storage.BufferSize,
             FileOptions.Asynchronous | FileOptions.SequentialScan |
             (access is FileAccess.Write ? FileOptions.WriteThrough : FileOptions.None), logger);
     }
@@ -128,12 +130,12 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
     {
         ValidateSecurityOperation();
 
-        var nonce = ArrayPool<byte>.Shared.Rent(Constants.KeyVaultConstants.NonceSize);
+        var nonce = ArrayPool<byte>.Shared.Rent(Constants.Security.KeyVault.NonceSize);
         try
         {
-            await sourceStream.ReadExactlyAsync(nonce.AsMemory(0, Constants.KeyVaultConstants.NonceSize),
+            await sourceStream.ReadExactlyAsync(nonce.AsMemory(0, Constants.Security.KeyVault.NonceSize),
                 cancellationToken);
-            using var aesGcm = new AesGcm(key, Constants.KeyVaultConstants.TagSize);
+            using var aesGcm = new AesGcm(key, Constants.Security.KeyVault.TagSize);
             await ProcessDecryptionStreamAsync(sourceStream, destinationStream, aesGcm, nonce, cancellationToken);
         }
         finally
@@ -152,44 +154,45 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
     {
         ValidateSecurityOperation();
 
-        var tag = ArrayPool<byte>.Shared.Rent(Constants.KeyVaultConstants.TagSize);
-        var buffer = ArrayPool<byte>.Shared.Rent(Constants.StorageConstants.BufferSize);
-        var plaintext = ArrayPool<byte>.Shared.Rent(Constants.StorageConstants.BufferSize);
-        var chunkNonce = ArrayPool<byte>.Shared.Rent(Constants.KeyVaultConstants.NonceSize);
+        var tag = ArrayPool<byte>.Shared.Rent(Constants.Security.KeyVault.TagSize);
+        var buffer = ArrayPool<byte>.Shared.Rent(Constants.Storage.BufferSize);
+        var plaintext = ArrayPool<byte>.Shared.Rent(Constants.Storage.BufferSize);
+        var chunkNonce = ArrayPool<byte>.Shared.Rent(Constants.Security.KeyVault.NonceSize);
 
         try
         {
             var totalLength = sourceStream.Length;
-            
+
             var totalBlocks =
-                (long)Math.Ceiling((double)(totalLength - Constants.KeyVaultConstants.NonceSize) / 
-                    Constants.KeyVaultConstants.TagSize + Constants.StorageConstants.BufferSize);
-            
+                (long)Math.Ceiling((double)(totalLength - Constants.Security.KeyVault.NonceSize) /
+                    Constants.Security.KeyVault.TagSize + Constants.Storage.BufferSize);
+
             var currentPrimeIndex = 0;
 
             for (var blockIndex = 0L; blockIndex < totalBlocks; blockIndex++)
             {
                 var tagRead = await sourceStream.ReadAsync(
-                    tag.AsMemory(0, Constants.KeyVaultConstants.TagSize),
+                    tag.AsMemory(0, Constants.Security.KeyVault.TagSize),
                     cancellationToken);
 
                 if (tagRead is 0) break;
-                
+
                 var bytesRead = await sourceStream.ReadAsync(
-                    buffer.AsMemory(0, Constants.StorageConstants.BufferSize),
+                    buffer.AsMemory(0, Constants.Storage.BufferSize),
                     cancellationToken);
 
                 if (bytesRead is 0) break;
-                
-                var entropyMix = (long)(blockIndex * Constants.StorageConstants.Ratio * Constants.StorageConstants.PrimeNumbers[currentPrimeIndex]);
-                currentPrimeIndex = (currentPrimeIndex + 1) % Constants.StorageConstants.PrimeNumbers.Length;
+
+                var entropyMix = (long)(blockIndex * Constants.Storage.GoldenRatio *
+                                        Constants.Storage.PrimeNumbers[currentPrimeIndex]);
+                currentPrimeIndex = (currentPrimeIndex + 1) % Constants.Storage.PrimeNumbers.Length;
 
                 MemoryMarshal.Write(chunkNonce.AsSpan(), in MemoryMarshal.GetReference(nonce.AsSpan()));
 
                 if (Vector.IsHardwareAccelerated)
                 {
-                    var nonceSpan = chunkNonce.AsSpan(0, Constants.KeyVaultConstants.NonceSize);
-                    Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.KeyVaultConstants.NonceSize);
+                    var nonceSpan = chunkNonce.AsSpan(0, Constants.Security.KeyVault.NonceSize);
+                    Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.Security.KeyVault.NonceSize);
 
                     if (nonceSpan.Length >= sizeof(long))
                     {
@@ -198,16 +201,14 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
                         var vectorEntropy = MemoryMarshal.Cast<byte, Vector<byte>>(entropySpan);
 
                         if (vectorNonce.Length > 0 && vectorEntropy.Length > 0)
-                        {
                             vectorNonce[0] = Vector.Xor(vectorNonce[0], vectorEntropy[0]);
-                        }
                     }
                 }
                 else
                 {
-                    Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.KeyVaultConstants.NonceSize);
+                    Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.Security.KeyVault.NonceSize);
                     var entropyBytes = BitConverter.GetBytes(entropyMix);
-                    
+
                     for (var i = 0; i < sizeof(long); i++)
                     {
                         chunkNonce[i] ^= entropyBytes[i];
@@ -216,9 +217,9 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
                 }
 
                 aesGcm.Decrypt(
-                    chunkNonce.AsSpan(0, Constants.KeyVaultConstants.NonceSize),
+                    chunkNonce.AsSpan(0, Constants.Security.KeyVault.NonceSize),
                     buffer.AsSpan(0, bytesRead),
-                    tag.AsSpan(0, Constants.KeyVaultConstants.TagSize),
+                    tag.AsSpan(0, Constants.Security.KeyVault.TagSize),
                     plaintext.AsSpan(0, bytesRead));
 
                 await destinationStream.WriteAsync(plaintext.AsMemory(0, bytesRead), cancellationToken);
@@ -233,7 +234,7 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
             ArrayPool<byte>.Shared.Return(chunkNonce, true);
         }
     }
-    
+
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private async ValueTask ProcessEncryptedFileAsync(FileProcessingRequest request, byte[] key, byte[] nonce,
@@ -246,7 +247,7 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
             FileMode.Open,
             FileAccess.Read,
             FileShare.Read,
-            Constants.StorageConstants.BufferSize,
+            Constants.Storage.BufferSize,
             FileOptions.Asynchronous | FileOptions.SequentialScan,
             _logger);
 
@@ -255,23 +256,23 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
             FileMode.Create,
             FileAccess.Write,
             FileShare.None,
-            Constants.StorageConstants.BufferSize,
+            Constants.Storage.BufferSize,
             FileOptions.Asynchronous | FileOptions.SequentialScan,
             _logger);
 
         await destinationStream.WriteAsync(nonce.AsMemory(), cancellationToken);
 
-        using var aesGcm = new AesGcm(key, Constants.KeyVaultConstants.TagSize);
-        
-        var fileLength = sourceStream.Length;
-        var totalBlocks = (long)Math.Ceiling((double)fileLength / Constants.StorageConstants.BufferSize);
+        using var aesGcm = new AesGcm(key, Constants.Security.KeyVault.TagSize);
 
-        var buffer = ArrayPool<byte>.Shared.Rent(Constants.StorageConstants.BufferSize);
-        var ciphertext = ArrayPool<byte>.Shared.Rent(Constants.StorageConstants.BufferSize);
-        var tag = ArrayPool<byte>.Shared.Rent(Constants.KeyVaultConstants.TagSize);
-        var chunkNonce = ArrayPool<byte>.Shared.Rent(Constants.KeyVaultConstants.NonceSize);
+        var fileLength = sourceStream.Length;
+        var totalBlocks = (long)Math.Ceiling((double)fileLength / Constants.Storage.BufferSize);
+
+        var buffer = ArrayPool<byte>.Shared.Rent(Constants.Storage.BufferSize);
+        var ciphertext = ArrayPool<byte>.Shared.Rent(Constants.Storage.BufferSize);
+        var tag = ArrayPool<byte>.Shared.Rent(Constants.Security.KeyVault.TagSize);
+        var chunkNonce = ArrayPool<byte>.Shared.Rent(Constants.Security.KeyVault.NonceSize);
         var combinedBuffer =
-            ArrayPool<byte>.Shared.Rent(Constants.KeyVaultConstants.TagSize + Constants.StorageConstants.BufferSize);
+            ArrayPool<byte>.Shared.Rent(Constants.Security.KeyVault.TagSize + Constants.Storage.BufferSize);
 
         try
         {
@@ -281,23 +282,23 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
             for (var position = 0L; position < totalBlocks; position++)
             {
                 var bytesRead = await sourceStream.ReadAsync(
-                    buffer.AsMemory(0, Constants.StorageConstants.BufferSize),
+                    buffer.AsMemory(0, Constants.Storage.BufferSize),
                     cancellationToken);
 
                 if (bytesRead is 0) break;
-                
-                var fibonacciMix = (previousBlock + currentBlock) % long.MaxValue;
+
+                var fibonacci = (previousBlock + currentBlock) % long.MaxValue;
                 MemoryMarshal.Write(chunkNonce.AsSpan(), in MemoryMarshal.GetReference(nonce.AsSpan()));
 
                 if (Vector.IsHardwareAccelerated)
                 {
-                    var nonceSpan = chunkNonce.AsSpan(0, Constants.KeyVaultConstants.NonceSize);
-                    Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.KeyVaultConstants.NonceSize);
+                    var nonceSpan = chunkNonce.AsSpan(0, Constants.Security.KeyVault.NonceSize);
+                    Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.Security.KeyVault.NonceSize);
 
                     if (nonceSpan.Length >= sizeof(long))
                     {
                         var positionSpan =
-                            MemoryMarshal.Cast<long, byte>(MemoryMarshal.CreateSpan(ref fibonacciMix, 1));
+                            MemoryMarshal.Cast<long, byte>(MemoryMarshal.CreateSpan(ref fibonacci, 1));
                         var vectorNonce = MemoryMarshal.Cast<byte, Vector<byte>>(nonceSpan);
                         var vectorPosition = MemoryMarshal.Cast<byte, Vector<byte>>(positionSpan);
 
@@ -307,27 +308,27 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
                 }
                 else
                 {
-                    Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.KeyVaultConstants.NonceSize);
-                    var mixBytes = BitConverter.GetBytes(fibonacciMix);
+                    Buffer.BlockCopy(nonce, 0, chunkNonce, 0, Constants.Security.KeyVault.NonceSize);
+                    var mixBytes = BitConverter.GetBytes(fibonacci);
                     for (var i = 0; i < sizeof(long); i++)
                         chunkNonce[i] ^= mixBytes[i];
                 }
 
                 aesGcm.Encrypt(
-                    chunkNonce.AsSpan(0, Constants.KeyVaultConstants.NonceSize),
+                    chunkNonce.AsSpan(0, Constants.Security.KeyVault.NonceSize),
                     buffer.AsSpan(0, bytesRead),
                     ciphertext.AsSpan(0, bytesRead),
-                    tag.AsSpan(0, Constants.KeyVaultConstants.TagSize));
+                    tag.AsSpan(0, Constants.Security.KeyVault.TagSize));
 
                 var combinedSpan = combinedBuffer.AsSpan();
                 tag.AsSpan().CopyTo(combinedSpan);
-                ciphertext.AsSpan(0, bytesRead).CopyTo(combinedSpan[Constants.KeyVaultConstants.TagSize..]);
+                ciphertext.AsSpan(0, bytesRead).CopyTo(combinedSpan[Constants.Security.KeyVault.TagSize..]);
 
                 await destinationStream.WriteAsync(
-                    combinedBuffer.AsMemory(0, Constants.KeyVaultConstants.TagSize + bytesRead),
+                    combinedBuffer.AsMemory(0, Constants.Security.KeyVault.TagSize + bytesRead),
                     cancellationToken);
                 await destinationStream.FlushAsync(cancellationToken);
-                
+
                 var nextBlock = (currentBlock + previousBlock) % long.MaxValue;
                 previousBlock = currentBlock;
                 currentBlock = nextBlock;

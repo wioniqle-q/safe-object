@@ -10,7 +10,7 @@ public static partial class WindowsKernel
     [LibraryImport(Kernel32LibraryName, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool FlushFileBuffers(SafeFileHandle handle);
-    
+
     [LibraryImport(Kernel32LibraryName, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool CloseHandle(IntPtr hObject);

@@ -24,7 +24,7 @@ public static partial class LinuxKernel
 
     public static int SetIoPriority(int which, int who, int ioClass, int priority)
     {
-        return ioprio_set(Constants.LinuxNativeConstants.SysIoprioSet, which, who,
-            (ioClass << Constants.LinuxNativeConstants.IoprioClassShift) | priority);
+        return ioprio_set(Constants.Linux.IoPriority.SysSet, which, who,
+            (ioClass << Constants.Linux.IoPriority.ClassShift) | priority);
     }
 }

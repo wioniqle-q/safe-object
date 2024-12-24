@@ -26,23 +26,13 @@ try
     var stopwatch = Stopwatch.StartNew();
 
     Console.WriteLine("Starting encryption...");
-    var encryptRequest = new FileProcessingRequest
-    {
-        FileId = fileId,
-        SourcePath = sourcePath,
-        DestinationPath = destinationPath
-    };
+    var encryptRequest = new FileProcessingRequest(fileId, sourcePath, destinationPath);
     await objectStorage.EncryptFileAsync(encryptRequest, filePublicMasterKey, CancellationToken.None);
 
     Console.WriteLine("Encryption completed!");
 
     Console.WriteLine("Starting decryption...");
-    var decryptRequest = new FileProcessingRequest
-    {
-        FileId = fileId,
-        SourcePath = destinationPath,
-        DestinationPath = decryptedPath
-    };
+    var decryptRequest = new FileProcessingRequest(fileId, destinationPath, decryptedPath);
     await objectStorage.DecryptFileAsync(decryptRequest, filePublicMasterKey, CancellationToken.None);
 
     objectStorage.Dispose();

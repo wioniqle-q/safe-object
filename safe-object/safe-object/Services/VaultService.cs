@@ -13,6 +13,7 @@ public sealed class VaultService : IVaultService, IDisposable
     private readonly string _systemSecurityKey = GenerateSystemSecurityKey(256);
     private bool _disposed;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
         Dispose(true);
@@ -27,11 +28,7 @@ public sealed class VaultService : IVaultService, IDisposable
         var encryptedPrivateKey = await EncryptAsync(filePrivateKey, filePublicMasterKey).ConfigureAwait(false);
         var finalEncryptedKey = await EncryptAsync(encryptedPrivateKey, _systemSecurityKey).ConfigureAwait(false);
 
-        var encryptionKey = new EncryptionKey
-        {
-            FileId = fileId,
-            EncryptedFilePrivateKey = finalEncryptedKey
-        };
+        var encryptionKey = new EncryptionKey(fileId, finalEncryptedKey);
 
         if (_keyStore.TryAdd(fileId, encryptionKey) is not true)
             throw new InvalidOperationException($"Key for file ID {fileId} already exists.");
@@ -52,6 +49,7 @@ public sealed class VaultService : IVaultService, IDisposable
         return await DecryptAsync(decryptedLayerOne, filePublicMasterKey).ConfigureAwait(false);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Dispose(bool disposing)
     {
         if (_disposed) return;
@@ -70,6 +68,7 @@ public sealed class VaultService : IVaultService, IDisposable
         Dispose(false);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
     {
         if (_disposed is not true) return;
@@ -99,22 +98,22 @@ public sealed class VaultService : IVaultService, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Task<string> EncryptAsync(string data, string key)
     {
-        var nonce = new byte[Constants.KeyVaultConstants.NonceSize];
+        var nonce = new byte[Constants.Security.KeyVault.NonceSize];
         RandomNumberGenerator.Fill(nonce);
 
         var plaintext = Encoding.UTF8.GetBytes(data);
         var ciphertext = new byte[plaintext.Length];
-        var tag = new byte[Constants.KeyVaultConstants.TagSize];
+        var tag = new byte[Constants.Security.KeyVault.TagSize];
 
-        using var aesGcm = new AesGcm(Convert.FromBase64String(key), Constants.KeyVaultConstants.TagSize);
+        using var aesGcm = new AesGcm(Convert.FromBase64String(key), Constants.Security.KeyVault.TagSize);
         aesGcm.Encrypt(nonce, plaintext, ciphertext, tag);
 
-        var result = new byte[Constants.KeyVaultConstants.NonceSize + ciphertext.Length +
-                              Constants.KeyVaultConstants.TagSize];
-        Buffer.BlockCopy(nonce, 0, result, 0, Constants.KeyVaultConstants.NonceSize);
-        Buffer.BlockCopy(ciphertext, 0, result, Constants.KeyVaultConstants.NonceSize, ciphertext.Length);
-        Buffer.BlockCopy(tag, 0, result, Constants.KeyVaultConstants.NonceSize + ciphertext.Length,
-            Constants.KeyVaultConstants.TagSize);
+        var result = new byte[Constants.Security.KeyVault.NonceSize + ciphertext.Length +
+                              Constants.Security.KeyVault.TagSize];
+        Buffer.BlockCopy(nonce, 0, result, 0, Constants.Security.KeyVault.NonceSize);
+        Buffer.BlockCopy(ciphertext, 0, result, Constants.Security.KeyVault.NonceSize, ciphertext.Length);
+        Buffer.BlockCopy(tag, 0, result, Constants.Security.KeyVault.NonceSize + ciphertext.Length,
+            Constants.Security.KeyVault.TagSize);
 
         return Task.FromResult(Convert.ToBase64String(result));
     }
@@ -123,23 +122,23 @@ public sealed class VaultService : IVaultService, IDisposable
     private static Task<string> DecryptAsync(string encryptedData, string key)
     {
         var fullData = Convert.FromBase64String(encryptedData);
-        if (fullData.Length < Constants.KeyVaultConstants.NonceSize + Constants.KeyVaultConstants.TagSize)
+        if (fullData.Length < Constants.Security.KeyVault.NonceSize + Constants.Security.KeyVault.TagSize)
             throw new ArgumentException("Encrypted data is invalid or corrupted");
 
-        var nonce = new byte[Constants.KeyVaultConstants.NonceSize];
-        Buffer.BlockCopy(fullData, 0, nonce, 0, Constants.KeyVaultConstants.NonceSize);
+        var nonce = new byte[Constants.Security.KeyVault.NonceSize];
+        Buffer.BlockCopy(fullData, 0, nonce, 0, Constants.Security.KeyVault.NonceSize);
 
-        var ciphertext = new byte[fullData.Length - Constants.KeyVaultConstants.NonceSize -
-                                  Constants.KeyVaultConstants.TagSize];
-        Buffer.BlockCopy(fullData, Constants.KeyVaultConstants.NonceSize, ciphertext, 0, ciphertext.Length);
+        var ciphertext = new byte[fullData.Length - Constants.Security.KeyVault.NonceSize -
+                                  Constants.Security.KeyVault.TagSize];
+        Buffer.BlockCopy(fullData, Constants.Security.KeyVault.NonceSize, ciphertext, 0, ciphertext.Length);
 
-        var tag = new byte[Constants.KeyVaultConstants.TagSize];
-        Buffer.BlockCopy(fullData, fullData.Length - Constants.KeyVaultConstants.TagSize, tag, 0,
-            Constants.KeyVaultConstants.TagSize);
+        var tag = new byte[Constants.Security.KeyVault.TagSize];
+        Buffer.BlockCopy(fullData, fullData.Length - Constants.Security.KeyVault.TagSize, tag, 0,
+            Constants.Security.KeyVault.TagSize);
 
         var plaintext = new byte[ciphertext.Length];
 
-        using var aesGcm = new AesGcm(Convert.FromBase64String(key), Constants.KeyVaultConstants.TagSize);
+        using var aesGcm = new AesGcm(Convert.FromBase64String(key), Constants.Security.KeyVault.TagSize);
         aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
 
         return Task.FromResult(Encoding.UTF8.GetString(plaintext));

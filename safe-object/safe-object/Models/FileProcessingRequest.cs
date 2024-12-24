@@ -1,8 +1,3 @@
 ﻿namespace safe_object.Models;
 
-public sealed class FileProcessingRequest
-{
-    public string FileId { get; set; } = string.Empty;
-    public string SourcePath { get; set; } = string.Empty;
-    public string DestinationPath { get; set; } = string.Empty;
-}
+public sealed record FileProcessingRequest(string FileId, string SourcePath, string DestinationPath);
