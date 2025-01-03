@@ -16,7 +16,7 @@ public sealed class DirectStream : FileStream
     private readonly ILogger<StorageService>? _logger;
     private bool _disposed;
 
-    private int _flushState;
+    private volatile int _flushState;
 
     public DirectStream(
         string path,
