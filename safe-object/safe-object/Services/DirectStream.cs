@@ -82,7 +82,7 @@ public sealed class DirectStream : FileStream
             priorityClass,
             0) is 0;
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ConfigureUnixAdvice()
     {
@@ -142,7 +142,7 @@ public sealed class DirectStream : FileStream
 
         ObjectDisposedException.ThrowIf(_disposed, nameof(DirectStream));
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private async Task ExecutePlatformSpecificFlushAsync(CancellationToken cancellationToken)
     {

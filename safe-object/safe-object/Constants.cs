@@ -5,8 +5,6 @@ public static class Constants
     public static class Storage
     {
         public const int BufferSize = 81920;
-        public const double GoldenRatio = 1.618033988749895;
-        public static ReadOnlySpan<int> PrimeNumbers => [2, 3, 5, 7, 11, 13, 17, 19, 23, 29];
     }
 
     public static class Security

@@ -115,7 +115,7 @@ public sealed class VaultService : IVaultService, IDisposable
         Buffer.BlockCopy(ciphertext, 0, result, Security.KeyVault.NonceSize, ciphertext.Length);
         Buffer.BlockCopy(tag, 0, result, Security.KeyVault.NonceSize + ciphertext.Length,
             Security.KeyVault.TagSize);
-        
+
         var output = Convert.ToBase64String(result);
 
         byte[][] buffers = [plaintext, ciphertext, result];
@@ -146,21 +146,18 @@ public sealed class VaultService : IVaultService, IDisposable
 
         using var aesGcm = new AesGcm(Convert.FromBase64String(key), Security.KeyVault.TagSize);
         aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
-        
+
         var output = Encoding.UTF8.GetString(plaintext);
-        
+
         byte[][] buffers = [fullData, ciphertext, tag, plaintext];
         CleanMemory(buffers.AsSpan());
-        
+
         return Task.FromResult(output);
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void CleanMemory(ReadOnlySpan<byte[]> buffers)
     {
-        foreach (var buffer in buffers)
-        {
-            CryptographicOperations.ZeroMemory(buffer.AsSpan());
-        }
+        foreach (var buffer in buffers) CryptographicOperations.ZeroMemory(buffer.AsSpan());
     }
 }

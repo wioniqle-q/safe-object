@@ -17,13 +17,12 @@ var objectStorage = new StorageService(logger, vaultService);
 try
 {
     const string sourcePath = @""; // Provide the path to the file you want to encrypt/decrypt
-    
+
     var destinationPath = Path.Combine(Path.GetDirectoryName(sourcePath)!, "encrypted_" + Path.GetFileName(sourcePath));
     var decryptedPath = Path.Combine(Path.GetDirectoryName(sourcePath)!, "decrypted_" + Path.GetFileName(sourcePath));
-    
+
     var filePublicMasterKey = GenerateAesKey();
     var fileId = Guid.NewGuid().ToString();
-
     var stopwatch = Stopwatch.StartNew();
 
     Console.WriteLine("Starting encryption...");
