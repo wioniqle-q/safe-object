@@ -1,7 +1,5 @@
 ﻿using System.Buffers;
-using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -147,28 +145,94 @@ public sealed class StorageService(ILogger<StorageService>? logger, IVaultServic
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void DeriveNonce(byte[] originalNonce, long blockIndex, byte[] outputNonce)
     {
-        Buffer.BlockCopy(originalNonce, 0, outputNonce, 0, Constants.Security.KeyVault.NonceSize);
+        if (originalNonce is null || outputNonce is null)
+            throw new ArgumentNullException(originalNonce is null ? nameof(originalNonce) : nameof(outputNonce));
 
-        var blockIndexBytes = BitConverter.GetBytes(blockIndex);
+        if (outputNonce.Length < Constants.Security.KeyVault.NonceSize)
+            throw new ArgumentOutOfRangeException(nameof(outputNonce),
+                $"Output nonce must be at least {Constants.Security.KeyVault.NonceSize} bytes long");
 
-        if (Vector.IsHardwareAccelerated && outputNonce.Length >= sizeof(long))
+        try
         {
-            var nonceSpan = outputNonce.AsSpan(0, Constants.Security.KeyVault.NonceSize);
-            var blockIndexSpan = MemoryMarshal.Cast<long, byte>(MemoryMarshal.CreateSpan(ref blockIndex, 1));
-            var vectorNonce = MemoryMarshal.Cast<byte, Vector<byte>>(nonceSpan);
-            var vectorBlockIndex = MemoryMarshal.Cast<byte, Vector<byte>>(blockIndexSpan);
+            Span<byte> blockIndexBytes = stackalloc byte[sizeof(long)];
+            if (BitConverter.TryWriteBytes(blockIndexBytes, blockIndex) is not true)
+                throw new InvalidOperationException();
 
-            if (vectorNonce.Length > 0 && vectorBlockIndex.Length > 0)
-                vectorNonce[0] = Vector.Xor(vectorNonce[0], vectorBlockIndex[0]);
-            else
-                for (var i = 0; i < Math.Min(blockIndexBytes.Length, nonceSpan.Length); i++)
-                    nonceSpan[i] ^= blockIndexBytes[i];
+            Span<byte> salt = stackalloc byte[32];
+            originalNonce.AsSpan(0, Math.Min(originalNonce.Length, Constants.Security.KeyVault.NonceSize)).CopyTo(salt);
+
+            for (var i = Constants.Security.KeyVault.NonceSize; i < salt.Length; i++)
+                salt[i] = (byte)(0xAA ^ (i & 0xFF));
+
+            Span<byte> prk = stackalloc byte[32];
+            {
+                using var hmac = new HMACSHA256();
+                hmac.Key = salt.ToArray();
+
+                if (!hmac.TryComputeHash(blockIndexBytes, prk, out var bytesWritten) || bytesWritten is not 32)
+                    throw new CryptographicException();
+
+                CryptographicOperations.ZeroMemory(hmac.Key);
+            }
+
+            Span<byte> info = stackalloc byte[sizeof(long) + 16];
+            blockIndexBytes.CopyTo(info);
+            var context = "AES-GCM-NONCE-V1"u8;
+            context.CopyTo(info[sizeof(long)..]);
+
+            Span<byte> okm = stackalloc byte[Constants.Security.KeyVault.NonceSize];
+            Span<byte> t = stackalloc byte[32];
+            Span<byte> input = stackalloc byte[32 + info.Length + 1];
+            Span<byte> currentT = stackalloc byte[32];
+            var tPos = 0;
+            byte counter = 1;
+
+            using (var hmacExpand = new HMACSHA256())
+            {
+                hmacExpand.Key = prk.ToArray();
+
+                var bytesToProcess = okm.Length;
+                var okmPos = 0;
+
+                while (bytesToProcess > 0)
+                {
+                    input.Clear();
+                    if (tPos > 0)
+                        t[..tPos].CopyTo(input);
+
+                    info.CopyTo(input[tPos..]);
+                    input[tPos + info.Length] = counter++;
+
+                    currentT.Clear();
+                    if (!hmacExpand.TryComputeHash(input[..(tPos + info.Length + 1)], currentT, out var bytesWritten) ||
+                        bytesWritten is not 32)
+                        throw new CryptographicException();
+
+                    var bytesToCopy = Math.Min(bytesToProcess, currentT.Length);
+                    currentT[..bytesToCopy].CopyTo(okm[okmPos..]);
+                    okmPos += bytesToCopy;
+                    bytesToProcess -= bytesToCopy;
+                    currentT.CopyTo(t);
+                    tPos = currentT.Length;
+                }
+
+                CryptographicOperations.ZeroMemory(hmacExpand.Key);
+            }
+
+            okm.CopyTo(outputNonce.AsSpan(0, Constants.Security.KeyVault.NonceSize));
+
+            CryptographicOperations.ZeroMemory(prk);
+            CryptographicOperations.ZeroMemory(salt);
+            CryptographicOperations.ZeroMemory(okm);
+            CryptographicOperations.ZeroMemory(t);
+            CryptographicOperations.ZeroMemory(input);
+            CryptographicOperations.ZeroMemory(currentT);
+            CryptographicOperations.ZeroMemory(info);
+            CryptographicOperations.ZeroMemory(blockIndexBytes);
         }
-        else
+        catch (Exception ex)
         {
-            var nonceSpan = outputNonce.AsSpan(0, Constants.Security.KeyVault.NonceSize);
-            for (var i = 0; i < Math.Min(blockIndexBytes.Length, nonceSpan.Length); i++)
-                nonceSpan[i] ^= blockIndexBytes[i];
+            throw new CryptographicException("Nonce derivation failed", ex);
         }
     }
 

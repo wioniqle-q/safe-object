@@ -89,8 +89,8 @@ public sealed class VaultService : IVaultService, IDisposable
         using var keyDerivation = new Rfc2898DeriveBytes(
             initialKey,
             RandomNumberGenerator.GetBytes(32),
-            200000,
-            HashAlgorithmName.SHA512);
+            100000,
+            HashAlgorithmName.SHA3_512);
 
         var finalKey = keyDerivation.GetBytes(keySize / 8);
         return Convert.ToBase64String(finalKey);

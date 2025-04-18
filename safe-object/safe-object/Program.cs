@@ -70,7 +70,7 @@ static string GenerateAesKey(int keySize = 256)
         initialKey,
         RandomNumberGenerator.GetBytes(32),
         100000,
-        HashAlgorithmName.SHA512);
+        HashAlgorithmName.SHA3_512);
 
     var finalKey = keyDerivation.GetBytes(keySize / 8);
     return Convert.ToBase64String(finalKey);
