@@ -2,6 +2,10 @@
 
 A secure file encryption and storage solution built with C#, emphasizing security, performance, and memory safety.
 
+> [!NOTE]  
+> This project has a separate UI branch that includes a user-friendly interface for easier interaction. Please check out the UI branch for enhanced features.
+> [Click Me To Access UI Branch](https://github.com/wioniqle-q/safe-object/tree/safe-object-avalonia-test)
+
 ## Features
 
 - **Two-Layer Encryption**:
@@ -12,6 +16,13 @@ A secure file encryption and storage solution built with C#, emphasizing securit
   - **Properties**: AES-GCM with a 256-bit key for encryption. Uses a 16-byte (128-bit) authentication tag per block.
   - **Nonce Management**: Derives unique nonces per block using an HKDF-based construction (HMAC-SHA256).
 
+- **Secure Cryptography**:
+  - `RFC 2898` key derivation with SHA3-512 for system security keys
+
+- **Secure Stream Processing**:
+  - Processes files in configurable-sized chunks to support large files
+  - Implements per-block nonce derivation for stronger security
+  
 > [!IMPORTANT]  
 > **Linux-Specific Optimizations**: It offers several key technical features:  
 > - **I/O Priority Control**: Uses `ioprio_set` syscalls  
@@ -21,13 +32,6 @@ A secure file encryption and storage solution built with C#, emphasizing securit
 > [!IMPORTANT] 
 > **Windows-Specific Optimizations**: It offers several key technical features:
 > - **Direct Buffer Flushing:** Uses Windows-native `FlushFileBuffers` API
-
-- **Secure Cryptography**:
-  - `RFC 2898` key derivation with SHA3-512 for system security keys
-
-- **Secure Stream Processing**:
-  - Processes files in configurable-sized chunks to support large files
-  - Implements per-block nonce derivation for stronger security
 
 ## Reporting Issues
 Should you encounter any issues, please submit a new issue on the project repository, including a detailed description of your environment (e.g., operating system, version, hardware), the problem, steps to reproduce, and any relevant logs or error messages.
