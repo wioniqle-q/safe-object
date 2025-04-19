@@ -3,8 +3,8 @@
 A secure file encryption and storage solution built with C#, emphasizing security, performance, and memory safety.
 
 > [!NOTE]  
-> This project has a separate UI branch that includes a user-friendly interface for easier interaction. Please check out the UI branch for enhanced features.
-> [Click Me To Access UI Branch](https://github.com/wioniqle-q/safe-object/tree/safe-object-avalonia-test)
+> This project has a separate UI project that includes a user-friendly interface for easier interaction. Please check out the UI project for enhanced features.
+> [Click Me To Access UI Project](https://github.com/wioniqle-q/safe-object-avalonia)
 
 ## Features
 
