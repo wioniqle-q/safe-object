@@ -1,0 +1,57 @@
+name: Run Tests on Multiple Platforms
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, almalinux, ubuntu-latest]
+    runs-on: ${{ matrix.os == 'almalinux' && 'ubuntu-latest' || matrix.os }}
+
+    container:
+      image: ${{ matrix.os == 'almalinux' && 'almalinux/9-base' || '' }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 
+      if: matrix.os != 'almalinux'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Install dependencies for AlmaLinux 9-base
+      if: matrix.os == 'almalinux'
+      run: |
+        dnf install -y epel-release
+        dnf install -y dotnet-sdk-9.0
+
+    - name: Cache .NET packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Cache build output
+      uses: actions/cache@v4
+      with:
+        path: |
+          **/bin
+          **/obj
+        key: ${{ runner.os }}-build-${{ hashFiles('**/*.csproj', '**/*.sln') }}
+        restore-keys: |
+          ${{ runner.os }}-build-
+
+    - name: Restore dependencies
+      run: dotnet restore safeobject/safeobject.sln
+
+    - name: Build
+      run: dotnet build safeobject/safeobject.sln --no-restore --configuration Release
+
+    - name: Run tests
+      run: dotnet test safeobject/tests/SafeObject.Core.Tests/SafeObject.Core.Tests.csproj --no-build --verbosity detailed --configuration Release --logger "console;verbosity=detailed"
