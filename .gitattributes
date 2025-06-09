@@ -1,0 +1,74 @@
+* text=auto
+
+*.cs text diff=csharp
+*.vb text
+
+*.config text
+*.json text
+*.xml text
+*.yml text
+*.yaml text
+
+*.sln text eol=crlf merge=union
+*.csproj text merge=union
+*.vbproj text merge=union
+*.vcxproj text
+*.vcxproj.filters text
+*.proj text
+*.projitems text
+*.shproj text
+
+*.md text
+*.txt text
+*.rtf text diff=astextplain
+
+*.doc diff=astextplain
+*.DOC diff=astextplain
+*.docx diff=astextplain
+*.DOCX diff=astextplain
+*.dot diff=astextplain
+*.DOT diff=astextplain
+*.pdf diff=astextplain
+*.PDF diff=astextplain
+
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.sh text eol=lf
+
+*.dll binary
+*.exe binary
+*.pdb binary
+*.lib binary
+*.obj binary
+*.exp binary
+*.ilk binary
+*.suo binary
+*.user binary
+*.cache binary
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.svg text
+
+*.zip binary
+*.7z binary
+*.tar binary
+*.gz binary
+*.rar binary
+
+*.ttf binary
+*.eot binary
+*.woff binary
+*.woff2 binary
+
+*.nupkg binary
+
+*.pfx binary
+*.p12 binary
+*.cer binary
+*.crt binary
