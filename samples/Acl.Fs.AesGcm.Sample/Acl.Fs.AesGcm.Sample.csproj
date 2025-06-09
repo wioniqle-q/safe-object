@@ -9,21 +9,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Reference Include="Acl.Fs.Abstractions">
-            <HintPath>bin\Debug\net9.0\Acl.Fs.Abstractions.dll</HintPath>
-        </Reference>
-        <Reference Include="Acl.Fs.Core">
-            <HintPath>bin\Debug\net9.0\Acl.Fs.Core.dll</HintPath>
-        </Reference>
-        <Reference Include="Acl.Fs.Native">
-            <HintPath>bin\Debug\net9.0\Acl.Fs.Native.dll</HintPath>
-        </Reference>
-        <Reference Include="Acl.Fs.Stream">
-            <HintPath>bin\Debug\net9.0\Acl.Fs.Stream.dll</HintPath>
-        </Reference>
-        <Reference Include="Acl.Fs.Vault">
-            <HintPath>bin\Debug\net9.0\Acl.Fs.Vault.dll</HintPath>
-        </Reference>
+        <ProjectReference Include="..\..\src\Acl.Fs.Abstractions\Acl.Fs.Abstractions.csproj"/>
+        <ProjectReference Include="..\..\src\Acl.Fs.Core\Acl.Fs.Core.csproj"/>
+        <ProjectReference Include="..\..\src\Acl.Fs.Native\Acl.Fs.Native.csproj"/>
+        <ProjectReference Include="..\..\src\Acl.Fs.Stream\Acl.Fs.Stream.csproj"/>
+        <ProjectReference Include="..\..\src\Acl.Fs.Vault\Acl.Fs.Vault.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

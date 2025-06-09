@@ -13,7 +13,7 @@ Write-Host "Starting build process..." -ForegroundColor Green
 
 $SolutionFile = "Acl.Fs.sln"
 $SampleProjects = @(
-    "samples\Acl.Fs.AesGcm.Sample\Acl.Fs.AesGcm.Sample.csproj",
+    "samples\Acl.Fs.AesGcm.Sample\Acl.Fs.AesGcm.Sample.csproj"
 )
 $SourceProjects = @(
     "src\Acl.Fs.Abstractions\Acl.Fs.Abstractions.csproj",
@@ -39,24 +39,16 @@ catch {
     exit 1
 }
 
-Write-Host "Building sample projects in Debug mode..." -ForegroundColor Yellow
-foreach ($project in $SampleProjects) {
-    if (Test-Path $project) {
-        try {
-            Write-Host "  Building $project..." -ForegroundColor Cyan
-            dotnet build $project --configuration Debug --verbosity $Verbosity --no-restore
-            if ($LASTEXITCODE -ne 0) { throw "Build failed for $project" }
-        }
-        catch {
-            Write-Error "Build failed for $project - $_"
-            exit 1
-        }
-    }
-    else {
-        Write-Warning "Sample project not found: $project"
-    }
+Write-Host "Restoring NuGet packages..." -ForegroundColor Yellow
+try {
+    dotnet restore $SolutionFile --verbosity $Verbosity
+    if ($LASTEXITCODE -ne 0) { throw "Restore failed" }
+    Write-Host "Package restore completed successfully" -ForegroundColor Green
 }
-Write-Host "Sample projects built successfully" -ForegroundColor Green
+catch {
+    Write-Error "Package restore failed - $_"
+    exit 1
+}
 
 Write-Host "Building source projects in Release mode..." -ForegroundColor Yellow
 foreach ($project in $SourceProjects) {
@@ -76,6 +68,25 @@ foreach ($project in $SourceProjects) {
     }
 }
 Write-Host "Source projects built successfully" -ForegroundColor Green
+
+Write-Host "Building sample projects in Debug mode..." -ForegroundColor Yellow
+foreach ($project in $SampleProjects) {
+    if (Test-Path $project) {
+        try {
+            Write-Host "  Building $project..." -ForegroundColor Cyan
+            dotnet build $project --configuration Debug --verbosity $Verbosity --no-restore
+            if ($LASTEXITCODE -ne 0) { throw "Build failed for $project" }
+        }
+        catch {
+            Write-Error "Build failed for $project - $_"
+            exit 1
+        }
+    }
+    else {
+        Write-Warning "Sample project not found: $project"
+    }
+}
+Write-Host "Sample projects built successfully" -ForegroundColor Green
 
 Write-Host "Building test projects in Release mode..." -ForegroundColor Yellow
 foreach ($project in $TestProjects) {
