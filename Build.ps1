@@ -20,7 +20,6 @@ $SourceProjects = @(
     "src\Acl.Fs.Core\Acl.Fs.Core.csproj",
     "src\Acl.Fs.Stream\Acl.Fs.Stream.csproj",
     "src\Acl.Fs.Native\Acl.Fs.Native.csproj",
-    "src\Acl.Fs.Vault\Acl.Fs.Vault.csproj"
 )
 $TestProjects = @(
     "tests\Acl.Fs.Core.UnitTests\Acl.Fs.Core.UnitTests.csproj",

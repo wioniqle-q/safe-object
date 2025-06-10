@@ -13,7 +13,6 @@
         <ProjectReference Include="..\..\src\Acl.Fs.Core\Acl.Fs.Core.csproj"/>
         <ProjectReference Include="..\..\src\Acl.Fs.Native\Acl.Fs.Native.csproj"/>
         <ProjectReference Include="..\..\src\Acl.Fs.Stream\Acl.Fs.Stream.csproj"/>
-        <ProjectReference Include="..\..\src\Acl.Fs.Vault\Acl.Fs.Vault.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
