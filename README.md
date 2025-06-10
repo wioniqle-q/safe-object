@@ -3,55 +3,32 @@
 [<img src="https://img.shields.io/badge/Code%20Coverage-84%25-90EE90?logo=rider" alt="Code Coverage" style="width: 160px;">](https://github.com/user-attachments/assets/0b1d115a-cce8-429d-9476-abe0a360ae7d)
 [![Tests](https://github.com/wioniqle-q/acl-lib/actions/workflows/test.yml/badge.svg?event=workflow_dispatch)](https://github.com/wioniqle-q/acl-lib/actions/workflows/test.yml)
 
+## What is Acl.Fs?
 
+Acl.Fs is a high-performance file encryption library built with .NET 9. It provides cryptographic capabilities and
+It is optimized for cross-platform use.
 
-A high-performance file encryption library for .NET 9 that provides cryptographic capabilities with
-cross-platform optimizations.
+## Filing Issues
 
-## Overview
+I welcome bug reports, feature requests, and general feedback. When filing an issue, please do the following:
 
-Acl.Fs implements cryptographic approaches AES-256-GCM encryption 
-The library is designed for applications requiring performance-sensitive file encryption.
+- Include detailed steps to reproduce the problem.
+- Specify your operating system and .NET version.
+- Add code samples or error messages, if applicable.
 
-## Features
+## Reporting Security Issues and Security Bugs
 
-### Cryptographic Support
+**Please do not report security vulnerabilities through public GitHub issues.**
 
-- **AES-256-GCM**
-- **PBKDF2-SHA256**
-- **HKDF-SHA256**
+If you discover a security vulnerability, please report it privately.
 
-## Architecture
+- Sending an email to wioniqle.q@gmail.com.
+- Include detailed information about the vulnerability.
+- Providing steps to reproduce the issue.
 
-The library is organized into several core components:
+Rest assured that I take security seriously and will respond promptly to legitimate reports.
 
-- **Acl.Fs.Core**: Primary encryption/decryption services and cryptographic utilities
-- **Acl.Fs.Stream**: Platform-optimized direct I/O implementations
-- **Acl.Fs.Native**: Native library bindings and P/Invoke interfaces
-- **Acl.Fs.Abstractions**: Common constants, and data models
-- **Acl.Fs.Vault**: Key management services (in development) (As you wish you can add this later)
+## How can I contribute?
 
-## Platform Optimizations
+All contributions are welcome! Whether you're fixing bugs, adding features, improving documentation, or assisting with testing.
 
-### Linux
-
-- `posix_fadvise(POSIX_FADV_SEQUENTIAL)` 
-- `posix_fadvise(POSIX_FADV_DONTNEED)` 
-- `ioprio_set()` 
-- `fsync()` 
-
-### Windows
-
-- `FlushFileBuffers()` 
-- Overlapped I/O for asynchronous operations
-
-### macOS
-
-- `fcntl(F_FULLFSYNC)`
-
-## Contributing
-
-Contributions are welcome.
-
-## Reporting Issues
-Should you encounter any issues, please submit a new issue on the project repository, including a detailed description of your environment (e.g., operating system, version, hardware), the problem, steps to reproduce, and any relevant logs or error messages.

@@ -7,7 +7,6 @@ using Acl.Fs.Core.Models.AesGcm;
 using Acl.Fs.Vault.Abstractions.Interfaces;
 using Acl.Fs.Vault.Extensions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Acl.Fs.AesGcm.Sample;
 
