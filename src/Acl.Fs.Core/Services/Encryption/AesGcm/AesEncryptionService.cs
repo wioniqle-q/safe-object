@@ -33,11 +33,9 @@ internal sealed class AesEncryptionService(
         {
             RandomNumberGenerator.Fill(nonceBuffer.AsSpan(0, NonceSize));
 
-            var nonce = new byte[NonceSize];
-            nonceBuffer.AsSpan(0, NonceSize).CopyTo(nonce);
-
             await _aesEncryptionBase.ExecuteEncryptionProcessAsync(
-                transferInstruction, input.EncryptionKey.Span.ToArray(), nonce, _logger, cancellationToken);
+                transferInstruction, input.EncryptionKey.Span.ToArray(), nonceBuffer.AsSpan(0, NonceSize).ToArray(),
+                _logger, cancellationToken);
         }
         finally
         {

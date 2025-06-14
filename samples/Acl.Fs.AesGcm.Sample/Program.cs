@@ -4,11 +4,26 @@ using Acl.Fs.Core.Interfaces.Decryption.AesGcm;
 using Acl.Fs.Core.Interfaces.Encryption.AesGcm;
 using Acl.Fs.Core.Models;
 using Acl.Fs.Core.Models.AesGcm;
-using Acl.Fs.Vault.Abstractions.Interfaces;
-using Acl.Fs.Vault.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Acl.Fs.AesGcm.Sample;
+
+public class SimpleVaultService
+{
+    private readonly Dictionary<string, string> _keyStorage = new();
+
+    public Task StoreEncryptionKeyAsync(string fileId, string key, string masterPublicKey)
+    {
+        _keyStorage[fileId] = key;
+        return Task.CompletedTask;
+    }
+
+    public Task<string> RetrieveEncryptionKeyAsync(string fileId, string masterPublicKey)
+    {
+        return Task.FromResult(_keyStorage.TryGetValue(fileId, out var key) ? key : throw new KeyNotFoundException($"Key not found for file ID: {fileId}"));
+    }
+}
 
 internal static class Program
 {
@@ -37,7 +52,7 @@ internal static class Program
         
         var encryptionService = scope.ServiceProvider.GetRequiredService<IAesEncryptionService>();
         var decryptionService = scope.ServiceProvider.GetRequiredService<IAesDecryptionService>();
-        var vaultService = scope.ServiceProvider.GetRequiredService<IVaultService>();
+        var vaultService = new SimpleVaultService(); // Replace with actual vault service implementation
         
         try
         {
@@ -103,7 +118,6 @@ internal static class Program
     {
         var serviceProvider = new ServiceCollection()
             .AddAclFsCore()
-            .AddAclVault()
             .AddLogging(configure => configure.AddConsole())
             .BuildServiceProvider();
 
@@ -133,6 +147,13 @@ internal static class Program
         }
 
         Console.WriteLine("Sample completed. Press any key to exit.");
+        Console.ReadKey();
+        
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect(); 
+        
+        Console.WriteLine("Garbage collection completed.");
         Console.ReadKey();
     }
 }
