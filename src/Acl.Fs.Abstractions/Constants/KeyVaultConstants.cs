@@ -2,7 +2,6 @@
 
 internal static class KeyVaultConstants
 {
-    internal const int DefaultKeySize = 32;
     internal const int NonceSize = 12;
     internal const int TagSize = 16;
 

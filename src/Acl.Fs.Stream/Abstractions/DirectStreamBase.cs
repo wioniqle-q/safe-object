@@ -270,7 +270,7 @@ internal abstract class DirectStreamBase<TStream> : System.IO.Stream where TStre
                 var bytesToWrite = Math.Min(SectorSize, remaining);
                 var chunk = buffer.Slice(offset, bytesToWrite);
 
-                if (bytesToWrite == SectorSize)
+                if (bytesToWrite is SectorSize)
                 {
                     InnerStream.Write(chunk);
                 }
