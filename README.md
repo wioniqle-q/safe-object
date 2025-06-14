@@ -30,5 +30,6 @@ Rest assured that I take security seriously and will respond promptly to legitim
 
 ## How can I contribute?
 
-All contributions are welcome! Whether you're fixing bugs, adding features, improving documentation, or assisting with testing.
+All contributions are welcome! Whether you're fixing bugs, adding features, improving documentation, or assisting with
+testing.
 
