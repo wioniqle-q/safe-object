@@ -1,6 +1,6 @@
 # Acl.Fs
 
-[<img src="https://img.shields.io/badge/Code%20Coverage-84%25-90EE90?logo=rider" alt="Code Coverage" style="width: 160px;">](https://github.com/user-attachments/assets/0b1d115a-cce8-429d-9476-abe0a360ae7d)
+[<img src="https://img.shields.io/badge/Code%20Coverage-86%25-90EE90?logo=rider" alt="Code Coverage" style="width: 160px;">](https://github.com/user-attachments/assets/7b52cc33-16a2-49cc-85e6-e65c64a830cb)
 [![Tests](https://github.com/wioniqle-q/acl-lib/actions/workflows/test.yml/badge.svg?event=workflow_dispatch)](https://github.com/wioniqle-q/acl-lib/actions/workflows/test.yml)
 
 ## What is Acl.Fs?
