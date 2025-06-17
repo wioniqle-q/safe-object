@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net9.0</TargetFramework>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.6" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.6" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Acl.Fs.Abstractions\Acl.Fs.Abstractions.csproj"/>
+        <ProjectReference Include="..\..\src\Acl.Fs.Core\Acl.Fs.Core.csproj"/>
+        <ProjectReference Include="..\..\src\Acl.Fs.Native\Acl.Fs.Native.csproj"/>
+        <ProjectReference Include="..\..\src\Acl.Fs.Stream\Acl.Fs.Stream.csproj"/>
+    </ItemGroup>
+    
+</Project>
