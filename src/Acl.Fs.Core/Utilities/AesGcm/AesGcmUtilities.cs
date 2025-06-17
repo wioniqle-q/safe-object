@@ -1,4 +1,5 @@
 ﻿using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using static Acl.Fs.Abstractions.Constants.KeyVaultConstants;
 
@@ -38,6 +39,7 @@ internal static class AesGcmUtilities
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void DeriveNonce(byte[] salt, long blockIndex, byte[] outputNonce)
     {
         Span<byte> blockIndexBytes = stackalloc byte[sizeof(long)];

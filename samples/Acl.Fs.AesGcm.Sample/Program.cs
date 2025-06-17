@@ -162,8 +162,7 @@ internal static class Program
                 var encryptionInput = new AesEncryptionInput(key);
 
                 var encryptionStopwatch = Stopwatch.StartNew();
-                await encryptionService.EncryptFileAsync(encryptInstruction, encryptionInput, cancellationToken)
-                    .ConfigureAwait(false);
+                await encryptionService.EncryptFileAsync(encryptInstruction, encryptionInput, cancellationToken);
                 encryptionStopwatch.Stop();
 
                 Console.WriteLine(
@@ -216,7 +215,7 @@ internal static class Program
             .AddLogging(configure => configure.AddConsole().SetMinimumLevel(LogLevel.Debug))
             .BuildServiceProvider();
 
-        var sourceFilePaths = new[]
+       var sourceFilePaths = new[]
         {
             Path.Combine(@"", "")
         }.Where(File.Exists).ToArray();
