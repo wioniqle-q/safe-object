@@ -684,7 +684,7 @@ public sealed class DirectStreamReadWriteTests
 
                 var tasks = new List<Task>();
                 var exceptions = new List<Exception>();
-                using var semaphore = new SemaphoreSlim(1, 1); 
+                using var semaphore = new SemaphoreSlim(1, 1);
 
                 for (var i = 0; i < 10; i++)
                     tasks.Add(Task.Run(async () =>
