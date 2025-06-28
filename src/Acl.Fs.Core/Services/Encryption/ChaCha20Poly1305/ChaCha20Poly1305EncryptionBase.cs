@@ -78,7 +78,7 @@ internal sealed class ChaCha20Poly1305EncryptionBase(IChaCha20Poly1305Factory ch
 
         nonce.AsSpan(0, NonceSize)
             .CopyTo(metadataBuffer.AsSpan(offset));
-        
+
         offset += NonceSize;
 
         BinaryPrimitives.WriteInt64LittleEndian(
