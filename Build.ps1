@@ -19,7 +19,7 @@ $SourceProjects = @(
     "src\Acl.Fs.Abstractions\Acl.Fs.Abstractions.csproj",
     "src\Acl.Fs.Core\Acl.Fs.Core.csproj",
     "src\Acl.Fs.Stream\Acl.Fs.Stream.csproj",
-    "src\Acl.Fs.Native\Acl.Fs.Native.csproj",
+    "src\Acl.Fs.Native\Acl.Fs.Native.csproj"
 )
 $TestProjects = @(
     "tests\Acl.Fs.Core.UnitTests\Acl.Fs.Core.UnitTests.csproj",
@@ -67,6 +67,22 @@ foreach ($project in $SourceProjects) {
     }
 }
 Write-Host "Source projects built successfully" -ForegroundColor Green
+
+Write-Host "Restoring sample project packages..." -ForegroundColor Yellow
+foreach ($project in $SampleProjects) {
+    if (Test-Path $project) {
+        try {
+            Write-Host "  Restoring $project..." -ForegroundColor Cyan
+            dotnet restore $project --verbosity $Verbosity
+            if ($LASTEXITCODE -ne 0) { throw "Restore failed for $project" }
+        }
+        catch {
+            Write-Error "Restore failed for $project - $_"
+            exit 1
+        }
+    }
+}
+Write-Host "Sample project packages restored successfully" -ForegroundColor Green
 
 Write-Host "Building sample projects in Debug mode..." -ForegroundColor Yellow
 foreach ($project in $SampleProjects) {
