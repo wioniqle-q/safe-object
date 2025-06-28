@@ -1,16 +1,16 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using Acl.Fs.Core.Extensions;
-using Acl.Fs.Core.Interfaces.Decryption.AesGcm;
-using Acl.Fs.Core.Interfaces.Encryption.AesGcm;
+using Acl.Fs.Core.Interfaces.Decryption.ChaCha20Poly1305;
+using Acl.Fs.Core.Interfaces.Encryption.ChaCha20Poly1305;
 using Acl.Fs.Core.Models;
-using Acl.Fs.Core.Models.AesGcm;
+using Acl.Fs.Core.Models.ChaCha20Poly1305;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Acl.Fs.AesGcm.Sample;
+namespace Acl.Fs.ChaCha20Poly1305.Sample;
 
 public sealed class SampleVaultService(int maxConcurrency = 16) : IDisposable
 {
@@ -87,9 +87,10 @@ public sealed class SampleVaultService(int maxConcurrency = 16) : IDisposable
 internal static class Program
 {
     private static readonly int MaxConcurrency = Math.Max(1, Environment.ProcessorCount - 1);
-
-    private static byte[] GenerateSecureKey(int keySize = 32)
+    
+    private static byte[] GenerateSecureChaCha20Key()
     {
+        const int keySize = 32; 
         var keyBuffer = ArrayPool<byte>.Shared.Rent(keySize);
         try
         {
@@ -105,15 +106,18 @@ internal static class Program
             ArrayPool<byte>.Shared.Return(keyBuffer, true);
         }
     }
-
-    private static string GenerateAesKey()
+    
+    private static string GenerateChaCha20MasterKey()
     {
-        using var aes = Aes.Create();
-
-        aes.KeySize = 256;
-        aes.GenerateKey();
-
-        return Convert.ToBase64String(aes.Key);
+        var key = GenerateSecureChaCha20Key();
+        try
+        {
+            return Convert.ToBase64String(key);
+        }
+        finally
+        {
+            Array.Clear(key, 0, key.Length);
+        }
     }
 
     private static async Task<bool> ProcessFileAsync(
@@ -130,8 +134,8 @@ internal static class Program
         {
             using var scope = serviceProvider.CreateScope();
 
-            var encryptionService = scope.ServiceProvider.GetRequiredService<IAesEncryptionService>();
-            var decryptionService = scope.ServiceProvider.GetRequiredService<IAesDecryptionService>();
+            var encryptionService = scope.ServiceProvider.GetRequiredService<IChaCha20Poly1305EncryptionService>();
+            var decryptionService = scope.ServiceProvider.GetRequiredService<IChaCha20Poly1305DecryptionService>();
 
             if (File.Exists(sourceFilePath) is not true)
             {
@@ -145,41 +149,41 @@ internal static class Program
             var fileExtension = fileInfo.Extension;
             var directory = fileInfo.DirectoryName!;
 
-            var encryptedFilePath = Path.Combine(directory, $"encrypted_{fileName}{fileExtension}");
-            var decryptedFilePath = Path.Combine(directory, $"decrypted_{fileName}{fileExtension}");
+            var encryptedFilePath = Path.Combine(directory, $"chacha20_encrypted_{fileName}{fileExtension}");
+            var decryptedFilePath = Path.Combine(directory, $"chacha20_decrypted_{fileName}{fileExtension}");
 
             var fileId = Guid.NewGuid().ToString();
             var encryptInstruction = new FileTransferInstruction(fileId, sourceFilePath, encryptedFilePath);
 
             Console.WriteLine(
-                $"[{Thread.CurrentThread.ManagedThreadId}] Processing {fileInfo.Name} ({fileInfo.Length:N0} bytes)...");
+                $"[{Thread.CurrentThread.ManagedThreadId}] Processing {fileInfo.Name} ({fileInfo.Length:N0} bytes) with ChaCha20Poly1305...");
 
-            var key = GenerateSecureKey();
+            var key = GenerateSecureChaCha20Key();
             try
             {
                 await vaultService.StoreEncryptionKeyAsync(fileId, key, masterPublicKey);
 
-                var encryptionInput = new AesEncryptionInput(key);
+                var encryptionInput = new ChaCha20Poly1305EncryptionInput(key);
 
                 var encryptionStopwatch = Stopwatch.StartNew();
                 await encryptionService.EncryptFileAsync(encryptInstruction, encryptionInput, cancellationToken);
                 encryptionStopwatch.Stop();
 
                 Console.WriteLine(
-                    $"[{Thread.CurrentThread.ManagedThreadId}] Encrypted {fileInfo.Name} in {encryptionStopwatch.ElapsedMilliseconds}ms");
+                    $"[{Thread.CurrentThread.ManagedThreadId}] ChaCha20Poly1305 encrypted {fileInfo.Name} in {encryptionStopwatch.ElapsedMilliseconds}ms");
 
                 var retrievedKey = await vaultService.RetrieveEncryptionKeyAsync(fileId, masterPublicKey);
                 try
                 {
                     var decryptInstruction = new FileTransferInstruction(fileId, encryptedFilePath, decryptedFilePath);
-                    var decryptionInput = new AesDecryptionInput(retrievedKey);
+                    var decryptionInput = new ChaCha20Poly1305DecryptionInput(retrievedKey);
 
                     var decryptionStopwatch = Stopwatch.StartNew();
                     await decryptionService.DecryptFileAsync(decryptInstruction, decryptionInput, cancellationToken);
                     decryptionStopwatch.Stop();
 
                     Console.WriteLine(
-                        $"[{Thread.CurrentThread.ManagedThreadId}] Decrypted {fileInfo.Name} in {decryptionStopwatch.ElapsedMilliseconds}ms");
+                        $"[{Thread.CurrentThread.ManagedThreadId}] ChaCha20Poly1305 decrypted {fileInfo.Name} in {decryptionStopwatch.ElapsedMilliseconds}ms");
                     return true;
                 }
                 finally
@@ -212,11 +216,11 @@ internal static class Program
     {
         var serviceProvider = new ServiceCollection()
             .AddAclFsCore()
-            .AddAesGcmServices()
+            .AddChaCha20Poly1305Services()
             .AddLogging(configure => configure.AddConsole().SetMinimumLevel(LogLevel.Debug))
             .BuildServiceProvider();
 
-       var sourceFilePaths = new[]
+        var sourceFilePaths = new[]
         {
             Path.Combine(@"", "")
         }.Where(File.Exists).ToArray();
@@ -224,11 +228,12 @@ internal static class Program
         if (sourceFilePaths.Length is 0)
         {
             Console.WriteLine("No valid files found to process.");
+            Console.WriteLine("Please update the sourceFilePaths array with valid file paths.");
             Console.ReadKey();
             return;
         }
 
-        var masterPublicKey = GenerateAesKey();
+        var masterPublicKey = GenerateChaCha20MasterKey();
         using var cts = new CancellationTokenSource();
         using var vaultService = new SampleVaultService(MaxConcurrency);
         using var semaphore = new SemaphoreSlim(MaxConcurrency, MaxConcurrency);
@@ -242,7 +247,7 @@ internal static class Program
 
         try
         {
-            Console.WriteLine($"Processing {sourceFilePaths.Length} files with max concurrency: {MaxConcurrency}");
+            Console.WriteLine($"Processing {sourceFilePaths.Length} files with ChaCha20Poly1305 (max concurrency: {MaxConcurrency})");
             var overallStopwatch = Stopwatch.StartNew();
 
             var parallelOptions = new ParallelOptions
@@ -273,7 +278,7 @@ internal static class Program
             var successCount = results.Count(r => r);
             var totalCount = results.Count;
 
-            Console.WriteLine($"\nCompleted processing {totalCount} files in {overallStopwatch.ElapsedMilliseconds}ms");
+            Console.WriteLine($"\nCompleted ChaCha20Poly1305 processing of {totalCount} files in {overallStopwatch.ElapsedMilliseconds}ms");
             Console.WriteLine($"Success: {successCount}/{totalCount}");
 
             if (successCount < totalCount) Console.WriteLine($"Failed: {totalCount - successCount}");
@@ -291,7 +296,7 @@ internal static class Program
             await serviceProvider.DisposeAsync();
         }
 
-        Console.WriteLine("\nProcessing completed. Press any key to exit.");
+        Console.WriteLine("\nChaCha20Poly1305 processing completed. Press any key to exit.");
         Console.ReadKey();
 
         if (vaultService is IDisposable disposableVault) disposableVault.Dispose();

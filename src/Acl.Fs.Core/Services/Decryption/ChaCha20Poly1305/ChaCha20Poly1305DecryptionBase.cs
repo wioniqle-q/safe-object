@@ -1,8 +1,8 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using Acl.Fs.Abstractions.Constants;
 using Acl.Fs.Core.Interfaces;
-using Acl.Fs.Core.Interfaces.Decryption.AesGcm;
+using Acl.Fs.Core.Interfaces.Decryption.ChaCha20Poly1305;
 using Acl.Fs.Core.Interfaces.Factory;
 using Acl.Fs.Core.Models;
 using Acl.Fs.Core.Pool;
@@ -11,14 +11,15 @@ using Microsoft.Extensions.Logging;
 using static Acl.Fs.Abstractions.Constants.StorageConstants;
 using static Acl.Fs.Abstractions.Constants.KeyVaultConstants;
 
-namespace Acl.Fs.Core.Services.Decryption.AesGcm;
+namespace Acl.Fs.Core.Services.Decryption.ChaCha20Poly1305;
 
-internal sealed class AesDecryptionBase(
-    IAesGcmFactory aesGcmFactory,
-    IFileVersionValidator versionValidator) : IAesDecryptionBase
+internal sealed class ChaCha20Poly1305DecryptionBase(
+    IFileVersionValidator versionValidator,
+    IChaCha20Poly1305Factory chaCha20Poly1305Factory)
+    : IChaCha20Poly1305DecryptionBase
 {
-    private readonly IAesGcmFactory _aesGcmFactory =
-        aesGcmFactory ?? throw new ArgumentNullException(nameof(aesGcmFactory));
+    private readonly IChaCha20Poly1305Factory _chaCha20Poly1305Factory =
+        chaCha20Poly1305Factory ?? throw new ArgumentNullException(nameof(chaCha20Poly1305Factory));
 
     private readonly IFileVersionValidator _versionValidator =
         versionValidator ?? throw new ArgumentNullException(nameof(versionValidator));
@@ -47,7 +48,7 @@ internal sealed class AesDecryptionBase(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var aesGcm = _aesGcmFactory.Create(key);
+        using var chaCha20Poly1305 = _chaCha20Poly1305Factory.Create(key);
 
         var buffer = CryptoPool.Rent(BufferSize);
         var plaintext = CryptoPool.Rent(BufferSize);
@@ -64,7 +65,7 @@ internal sealed class AesDecryptionBase(
             await ProcessFileBlocksAsync(
                 sourceStream,
                 destinationStream,
-                aesGcm,
+                chaCha20Poly1305,
                 buffer,
                 plaintext,
                 alignedBuffer,
@@ -118,7 +119,7 @@ internal sealed class AesDecryptionBase(
     private static async Task ProcessFileBlocksAsync(
         System.IO.Stream sourceStream,
         System.IO.Stream destinationStream,
-        System.Security.Cryptography.AesGcm aesGcm,
+        System.Security.Cryptography.ChaCha20Poly1305 chaCha20Poly1305,
         byte[] buffer,
         byte[] plaintext,
         byte[] alignedBuffer,
@@ -150,7 +151,7 @@ internal sealed class AesDecryptionBase(
 
             await DecryptAndWriteBlockAsync(
                 destinationStream,
-                aesGcm,
+                chaCha20Poly1305,
                 buffer,
                 plaintext,
                 alignedBuffer,
@@ -172,7 +173,7 @@ internal sealed class AesDecryptionBase(
 
     private static async Task DecryptAndWriteBlockAsync(
         System.IO.Stream destinationStream,
-        System.Security.Cryptography.AesGcm aesGcm,
+        System.Security.Cryptography.ChaCha20Poly1305 chaCha20Poly1305,
         byte[] buffer,
         byte[] plaintext,
         byte[] alignedBuffer,
@@ -189,7 +190,7 @@ internal sealed class AesDecryptionBase(
 
         CryptographicUtilities.DeriveNonce(salt, blockIndex, chunkNonce);
 
-        DecryptBlock(aesGcm, buffer, plaintext, tag, chunkNonce, blockSize);
+        DecryptBlock(chaCha20Poly1305, buffer, plaintext, tag, chunkNonce, blockSize, blockIndex, salt);
 
         var bytesToWrite = (int)Math.Min(bytesRead, originalSize - processedBytes);
 
@@ -210,18 +211,28 @@ internal sealed class AesDecryptionBase(
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void DecryptBlock(
-        System.Security.Cryptography.AesGcm aesGcm,
+        System.Security.Cryptography.ChaCha20Poly1305 chaCha20Poly1305,
         byte[] buffer,
         byte[] plaintext,
         byte[] tag,
         byte[] chunkNonce,
-        int blockSize)
+        int blockSize,
+        long blockIndex,
+        byte[] salt)
     {
-        aesGcm.Decrypt(
+        Span<byte> associatedData = stackalloc byte[64 + sizeof(ulong) + sizeof(int)];
+
+        salt.AsSpan(0, Math.Min(64, salt.Length)).CopyTo(associatedData);
+
+        BinaryPrimitives.WriteInt64LittleEndian(associatedData[64..], blockIndex);
+        BinaryPrimitives.WriteInt32LittleEndian(associatedData[72..], blockSize);
+
+        chaCha20Poly1305.Decrypt(
             chunkNonce.AsSpan(0, NonceSize),
             buffer.AsSpan(0, blockSize),
             tag.AsSpan(0, TagSize),
-            plaintext.AsSpan(0, blockSize));
+            plaintext.AsSpan(0, blockSize),
+            associatedData);
     }
 
     private static async Task WriteLastBlockAsync(

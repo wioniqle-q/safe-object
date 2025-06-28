@@ -1,11 +1,11 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using static Acl.Fs.Abstractions.Constants.KeyVaultConstants;
 
-namespace Acl.Fs.Core.Utilities.AesGcm;
+namespace Acl.Fs.Core.Utilities;
 
-internal static class AesGcmUtilities
+internal static class CryptographicUtilities
 {
     internal static void PrecomputeSalt(byte[] originalNonce, byte[] salt)
     {
@@ -19,19 +19,19 @@ internal static class AesGcmUtilities
                 using var hmac = new HMACSHA256(originalNonce);
                 if (hmac.TryComputeHash(input, salt, out var bytesWritten) is not true ||
                     bytesWritten != SaltSize)
-                    throw new CryptographicException("Failed to derive salt.");
+                    throw new CryptographicException("Failed to derive salt for cryptographic operation.");
             }
             else
             {
                 using var hmac = new HMACSHA3_512(originalNonce);
                 if (hmac.TryComputeHash(input, salt, out var bytesWritten) is not true ||
                     bytesWritten != SaltSize)
-                    throw new CryptographicException("Failed to derive salt.");
+                    throw new CryptographicException("Failed to derive salt for cryptographic operation.");
             }
         }
         catch (Exception ex) when (ex is not CryptographicException)
         {
-            throw new CryptographicException("Failed to derive salt.", ex);
+            throw new CryptographicException("Failed to derive salt for cryptographic operation.", ex);
         }
         finally
         {
@@ -57,7 +57,7 @@ internal static class AesGcmUtilities
                 {
                     if (hmac.TryComputeHash(blockIndexBytes, prk, out var bytesWritten) is not true ||
                         bytesWritten != HmacKeySize)
-                        throw new CryptographicException("HMAC computation failed.");
+                        throw new CryptographicException("HMAC computation failed for cryptographic operation.");
                 }
 
                 blockIndexBytes.CopyTo(info);
@@ -71,7 +71,7 @@ internal static class AesGcmUtilities
                 {
                     if (hmac.TryComputeHash(blockIndexBytes, prk, out var bytesWritten) is not true ||
                         bytesWritten != HmacKeySize)
-                        throw new CryptographicException("HMAC computation failed.");
+                        throw new CryptographicException("HMAC computation failed for cryptographic operation.");
                 }
 
                 blockIndexBytes.CopyTo(info);
@@ -84,7 +84,7 @@ internal static class AesGcmUtilities
         }
         catch (Exception ex) when (ex is not CryptographicException)
         {
-            throw new CryptographicException("Failed to derive nonce.", ex);
+            throw new CryptographicException("Failed to derive nonce for cryptographic operation.", ex);
         }
         finally
         {

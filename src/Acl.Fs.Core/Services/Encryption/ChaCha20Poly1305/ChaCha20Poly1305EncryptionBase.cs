@@ -1,7 +1,7 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using Acl.Fs.Abstractions.Constants;
-using Acl.Fs.Core.Interfaces.Encryption.AesGcm;
+using Acl.Fs.Core.Interfaces.Encryption.ChaCha20Poly1305;
 using Acl.Fs.Core.Interfaces.Factory;
 using Acl.Fs.Core.Models;
 using Acl.Fs.Core.Pool;
@@ -10,13 +10,13 @@ using Microsoft.Extensions.Logging;
 using static Acl.Fs.Abstractions.Constants.StorageConstants;
 using static Acl.Fs.Abstractions.Constants.KeyVaultConstants;
 
-namespace Acl.Fs.Core.Services.Encryption.AesGcm;
+namespace Acl.Fs.Core.Services.Encryption.ChaCha20Poly1305;
 
-internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
-    : IAesEncryptionBase
+internal sealed class ChaCha20Poly1305EncryptionBase(IChaCha20Poly1305Factory chaCha20Poly1305Factory)
+    : IChaCha20Poly1305EncryptionBase
 {
-    private readonly IAesGcmFactory _aesGcmFactory =
-        aesGcmFactory ?? throw new ArgumentNullException(nameof(aesGcmFactory));
+    private readonly IChaCha20Poly1305Factory _chaCha20Poly1305Factory =
+        chaCha20Poly1305Factory ?? throw new ArgumentNullException(nameof(chaCha20Poly1305Factory));
 
     public async Task ExecuteEncryptionProcessAsync(
         FileTransferInstruction instruction,
@@ -28,7 +28,7 @@ internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
         await using var sourceStream = CryptoUtilities.CreateInputStream(instruction.SourcePath, logger);
         await using var destinationStream = CryptoUtilities.CreateOutputStream(instruction.DestinationPath, logger);
 
-        using var aesGcm = _aesGcmFactory.Create(key);
+        using var chaCha20Poly1305 = _chaCha20Poly1305Factory.Create(key);
 
         var buffer = CryptoPool.Rent(BufferSize);
         var ciphertext = CryptoPool.Rent(BufferSize);
@@ -45,7 +45,7 @@ internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
             await ProcessFileBlocksAsync(
                 sourceStream,
                 destinationStream,
-                aesGcm,
+                chaCha20Poly1305,
                 buffer,
                 ciphertext,
                 metadataBuffer,
@@ -78,6 +78,7 @@ internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
 
         nonce.AsSpan(0, NonceSize)
             .CopyTo(metadataBuffer.AsSpan(offset));
+        
         offset += NonceSize;
 
         BinaryPrimitives.WriteInt64LittleEndian(
@@ -102,7 +103,7 @@ internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
     private static async Task ProcessFileBlocksAsync(
         System.IO.Stream sourceStream,
         System.IO.Stream destinationStream,
-        System.Security.Cryptography.AesGcm aesGcm,
+        System.Security.Cryptography.ChaCha20Poly1305 chaCha20Poly1305,
         byte[] buffer,
         byte[] ciphertext,
         byte[] metadataBuffer,
@@ -123,7 +124,7 @@ internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
 
             await EncryptAndWriteBlockAsync(
                 destinationStream,
-                aesGcm,
+                chaCha20Poly1305,
                 buffer,
                 ciphertext,
                 metadataBuffer,
@@ -139,7 +140,7 @@ internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
 
     private static async Task EncryptAndWriteBlockAsync(
         System.IO.Stream destinationStream,
-        System.Security.Cryptography.AesGcm aesGcm,
+        System.Security.Cryptography.ChaCha20Poly1305 chaCha20Poly1305,
         byte[] buffer,
         byte[] ciphertext,
         byte[] metadataBuffer,
@@ -158,7 +159,7 @@ internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
 
         CryptographicUtilities.DeriveNonce(salt, blockIndex, chunkNonce);
 
-        EncryptBlock(aesGcm, buffer, ciphertext, tag, chunkNonce, alignedSize);
+        EncryptBlock(chaCha20Poly1305, buffer, ciphertext, tag, chunkNonce, alignedSize, blockIndex, salt);
 
         await WriteEncryptedBlockAsync(destinationStream, metadataBuffer, tag, ciphertext, alignedSize,
             cancellationToken);
@@ -166,18 +167,28 @@ internal sealed class AesEncryptionBase(IAesGcmFactory aesGcmFactory)
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void EncryptBlock(
-        System.Security.Cryptography.AesGcm aesGcm,
+        System.Security.Cryptography.ChaCha20Poly1305 chaCha20Poly1305,
         byte[] buffer,
         byte[] ciphertext,
         byte[] tag,
         byte[] chunkNonce,
-        int alignedSize)
+        int alignedSize,
+        long blockIndex,
+        byte[] salt)
     {
-        aesGcm.Encrypt(
+        Span<byte> associatedData = stackalloc byte[64 + sizeof(long) + sizeof(int)];
+
+        salt.AsSpan(0, Math.Min(64, salt.Length)).CopyTo(associatedData);
+
+        BinaryPrimitives.WriteInt64LittleEndian(associatedData[64..], blockIndex);
+        BinaryPrimitives.WriteInt32LittleEndian(associatedData[72..], alignedSize);
+
+        chaCha20Poly1305.Encrypt(
             chunkNonce.AsSpan(0, NonceSize),
             buffer.AsSpan(0, alignedSize),
             ciphertext.AsSpan(0, alignedSize),
-            tag.AsSpan(0, TagSize));
+            tag.AsSpan(0, TagSize),
+            associatedData);
     }
 
     private static async Task WriteEncryptedBlockAsync(

@@ -1,10 +1,10 @@
 ﻿using System.Security.Cryptography;
-using Acl.Fs.Core.Utilities.AesGcm;
+using Acl.Fs.Core.Utilities;
 using static Acl.Fs.Abstractions.Constants.KeyVaultConstants;
 
-namespace Acl.Fs.Core.UnitTests.Utilities.AesGcm;
+namespace Acl.Fs.Core.UnitTests.Utilities;
 
-public sealed class AesGcmUtilitiesTests
+public sealed class CryptographicUtilitiesTests
 {
     [Fact]
     public void PrecomputeSalt_ValidInputs_GeneratesSalt()
@@ -13,7 +13,7 @@ public sealed class AesGcmUtilitiesTests
         var salt = new byte[SaltSize];
         RandomNumberGenerator.Fill(originalNonce);
 
-        AesGcmUtilities.PrecomputeSalt(originalNonce, salt);
+        CryptographicUtilities.PrecomputeSalt(originalNonce, salt);
 
         Assert.NotNull(salt);
         Assert.Equal(SaltSize, salt.Length);
@@ -30,8 +30,8 @@ public sealed class AesGcmUtilitiesTests
         var salt1 = new byte[SaltSize];
         var salt2 = new byte[SaltSize];
 
-        AesGcmUtilities.PrecomputeSalt(originalNonce, salt1);
-        AesGcmUtilities.PrecomputeSalt(originalNonce, salt2);
+        CryptographicUtilities.PrecomputeSalt(originalNonce, salt1);
+        CryptographicUtilities.PrecomputeSalt(originalNonce, salt2);
 
         Assert.Equal(salt1, salt2);
     }
@@ -47,8 +47,8 @@ public sealed class AesGcmUtilitiesTests
         var salt1 = new byte[SaltSize];
         var salt2 = new byte[SaltSize];
 
-        AesGcmUtilities.PrecomputeSalt(originalNonce1, salt1);
-        AesGcmUtilities.PrecomputeSalt(originalNonce2, salt2);
+        CryptographicUtilities.PrecomputeSalt(originalNonce1, salt1);
+        CryptographicUtilities.PrecomputeSalt(originalNonce2, salt2);
 
 
         Assert.NotEqual(salt1, salt2);
@@ -65,7 +65,7 @@ public sealed class AesGcmUtilitiesTests
         var salt = new byte[SaltSize];
         RandomNumberGenerator.Fill(originalNonce);
 
-        var exception = Record.Exception(() => AesGcmUtilities.PrecomputeSalt(originalNonce, salt));
+        var exception = Record.Exception(() => CryptographicUtilities.PrecomputeSalt(originalNonce, salt));
         Assert.Null(exception);
         Assert.False(IsAllZeros(salt));
     }
@@ -79,7 +79,7 @@ public sealed class AesGcmUtilitiesTests
         var outputNonce = new byte[NonceSize];
         RandomNumberGenerator.Fill(salt);
 
-        AesGcmUtilities.DeriveNonce(salt, blockIndex, outputNonce);
+        CryptographicUtilities.DeriveNonce(salt, blockIndex, outputNonce);
 
         Assert.NotNull(outputNonce);
         Assert.Equal(NonceSize, outputNonce.Length);
@@ -98,8 +98,8 @@ public sealed class AesGcmUtilitiesTests
         var outputNonce2 = new byte[NonceSize];
 
 
-        AesGcmUtilities.DeriveNonce(salt, blockIndex, outputNonce1);
-        AesGcmUtilities.DeriveNonce(salt, blockIndex, outputNonce2);
+        CryptographicUtilities.DeriveNonce(salt, blockIndex, outputNonce1);
+        CryptographicUtilities.DeriveNonce(salt, blockIndex, outputNonce2);
 
 
         Assert.Equal(outputNonce1, outputNonce2);
@@ -114,8 +114,8 @@ public sealed class AesGcmUtilitiesTests
         var outputNonce1 = new byte[NonceSize];
         var outputNonce2 = new byte[NonceSize];
 
-        AesGcmUtilities.DeriveNonce(salt, 1, outputNonce1);
-        AesGcmUtilities.DeriveNonce(salt, 2, outputNonce2);
+        CryptographicUtilities.DeriveNonce(salt, 1, outputNonce1);
+        CryptographicUtilities.DeriveNonce(salt, 2, outputNonce2);
 
         Assert.NotEqual(outputNonce1, outputNonce2);
     }
@@ -133,8 +133,8 @@ public sealed class AesGcmUtilitiesTests
         var outputNonce2 = new byte[NonceSize];
 
 
-        AesGcmUtilities.DeriveNonce(salt1, blockIndex, outputNonce1);
-        AesGcmUtilities.DeriveNonce(salt2, blockIndex, outputNonce2);
+        CryptographicUtilities.DeriveNonce(salt1, blockIndex, outputNonce1);
+        CryptographicUtilities.DeriveNonce(salt2, blockIndex, outputNonce2);
 
 
         Assert.NotEqual(outputNonce1, outputNonce2);
@@ -151,7 +151,7 @@ public sealed class AesGcmUtilitiesTests
         var outputNonce = new byte[NonceSize];
         RandomNumberGenerator.Fill(salt);
 
-        var exception = Record.Exception(() => AesGcmUtilities.DeriveNonce(salt, blockIndex, outputNonce));
+        var exception = Record.Exception(() => CryptographicUtilities.DeriveNonce(salt, blockIndex, outputNonce));
         Assert.Null(exception);
         Assert.False(IsAllZeros(outputNonce));
     }
@@ -169,7 +169,7 @@ public sealed class AesGcmUtilitiesTests
         for (long i = 0; i < numNonces; i++)
         {
             var outputNonce = new byte[NonceSize];
-            AesGcmUtilities.DeriveNonce(salt, i, outputNonce);
+            CryptographicUtilities.DeriveNonce(salt, i, outputNonce);
             nonces.Add(outputNonce);
         }
 
@@ -185,7 +185,7 @@ public sealed class AesGcmUtilitiesTests
         var emptyNonce = Array.Empty<byte>();
         var salt = new byte[SaltSize];
 
-        var exception = Record.Exception(() => AesGcmUtilities.PrecomputeSalt(emptyNonce, salt));
+        var exception = Record.Exception(() => CryptographicUtilities.PrecomputeSalt(emptyNonce, salt));
 
         Assert.Null(exception);
         Assert.False(IsAllZeros(salt));
@@ -197,7 +197,7 @@ public sealed class AesGcmUtilitiesTests
         var emptySalt = Array.Empty<byte>();
         var outputNonce = new byte[NonceSize];
 
-        var exception = Record.Exception(() => AesGcmUtilities.DeriveNonce(emptySalt, 1, outputNonce));
+        var exception = Record.Exception(() => CryptographicUtilities.DeriveNonce(emptySalt, 1, outputNonce));
 
         Assert.True(exception is null or CryptographicException);
     }
@@ -209,7 +209,7 @@ public sealed class AesGcmUtilitiesTests
         var wrongSizeSalt = new byte[16];
         RandomNumberGenerator.Fill(originalNonce);
 
-        var exception = Record.Exception(() => AesGcmUtilities.PrecomputeSalt(originalNonce, wrongSizeSalt));
+        var exception = Record.Exception(() => CryptographicUtilities.PrecomputeSalt(originalNonce, wrongSizeSalt));
 
         Assert.NotNull(exception);
         Assert.IsType<CryptographicException>(exception);
@@ -222,7 +222,7 @@ public sealed class AesGcmUtilitiesTests
         var wrongSizeNonce = new byte[8];
         RandomNumberGenerator.Fill(salt);
 
-        var exception = Record.Exception(() => AesGcmUtilities.DeriveNonce(salt, 1, wrongSizeNonce));
+        var exception = Record.Exception(() => CryptographicUtilities.DeriveNonce(salt, 1, wrongSizeNonce));
         Assert.NotNull(exception);
         Assert.IsType<CryptographicException>(exception);
     }
@@ -234,12 +234,12 @@ public sealed class AesGcmUtilitiesTests
         RandomNumberGenerator.Fill(masterKey);
 
         var salt = new byte[SaltSize];
-        AesGcmUtilities.PrecomputeSalt(masterKey, salt);
+        CryptographicUtilities.PrecomputeSalt(masterKey, salt);
 
         var nonce1 = new byte[NonceSize];
         var nonce2 = new byte[NonceSize];
-        AesGcmUtilities.DeriveNonce(salt, 0, nonce1);
-        AesGcmUtilities.DeriveNonce(salt, 1, nonce2);
+        CryptographicUtilities.DeriveNonce(salt, 0, nonce1);
+        CryptographicUtilities.DeriveNonce(salt, 1, nonce2);
 
         Assert.False(IsAllZeros(salt));
         Assert.False(IsAllZeros(nonce1));
@@ -247,7 +247,7 @@ public sealed class AesGcmUtilitiesTests
         Assert.NotEqual(nonce1, nonce2);
 
         var salt2 = new byte[SaltSize];
-        AesGcmUtilities.PrecomputeSalt(masterKey, salt2);
+        CryptographicUtilities.PrecomputeSalt(masterKey, salt2);
         Assert.Equal(salt, salt2);
     }
 
